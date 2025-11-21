@@ -1,5 +1,7 @@
 # PDF EDITOR
 
+<img width="1365" height="693" alt="Captura de pantalla 2025-11-21 111030" src="https://github.com/user-attachments/assets/539af4f5-ee6b-4ddc-88b7-8ef944338d5c" />
+
 ### run windows
  ```
    run.bat
@@ -257,6 +259,7 @@ To add version information to the .exe:
 1. Create a `version_info.txt` file with Windows version resource format
 2. Add `version='version_info.txt'` to the `EXE` section in the spec file
 3. Rebuild
+
 
 
 
