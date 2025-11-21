@@ -1,3 +1,13 @@
+##PDF EDITOR
+
+#run windows
+   run.bat
+#linux
+   sh run.sh
+
+
+
+
 # Building Standalone Executables
 
 This document explains how to build standalone executables for the PDF Visual Editor on both Windows and Linux.
@@ -243,3 +253,4 @@ To add version information to the .exe:
 1. Create a `version_info.txt` file with Windows version resource format
 2. Add `version='version_info.txt'` to the `EXE` section in the spec file
 3. Rebuild
+
