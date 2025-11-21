@@ -1,8 +1,8 @@
-##PDF EDITOR
+## PDF EDITOR
 
-#run windows
+# run windows
    run.bat
-#linux
+# linux
    sh run.sh
 
 
@@ -253,4 +253,5 @@ To add version information to the .exe:
 1. Create a `version_info.txt` file with Windows version resource format
 2. Add `version='version_info.txt'` to the `EXE` section in the spec file
 3. Rebuild
+
 
