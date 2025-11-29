@@ -1,8 +1,7 @@
 import pikepdf
 from typing import List, Dict, Any, Optional
 from utils.geometry import CoordinateConverter
-from PyQt6.QtGui import QPixmap, QImage
-from PyQt6.QtCore import QBuffer, QIODevice
+from qt_compat import QPixmap, QImage, QBuffer, QIODevice
 import io
 
 class PikePDFWriter:

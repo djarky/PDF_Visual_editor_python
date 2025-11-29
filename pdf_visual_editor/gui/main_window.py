@@ -1,7 +1,9 @@
-from PyQt6.QtWidgets import QMainWindow, QSplitter, QWidget, QVBoxLayout, QFileDialog, QMessageBox, QLabel, QTreeWidgetItem, QGraphicsPixmapItem, QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem
-from PyQt6.QtGui import QPixmap, QTransform, QPen, QColor, QBrush, QUndoStack
-from PyQt6.QtGui import QPixmap, QTransform, QPen, QColor, QBrush
-from PyQt6.QtCore import Qt, QRectF, QBuffer, QIODevice
+
+from qt_compat import (QMainWindow, QSplitter, QWidget, QVBoxLayout, QFileDialog, 
+                       QMessageBox, QLabel, QTreeWidgetItem, QGraphicsPixmapItem, 
+                       QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem, QPixmap, 
+                       QTransform, QPen, QColor, QBrush, QUndoStack, Qt, QRectF, 
+                       QBuffer, QIODevice, QSettings, QUndoView, QPointF)
 from .editor_canvas import EditorCanvas, EditorScene, EditableTextItem, ResizablePixmapItem, ResizerHandle
 from .thumbnail_panel import ThumbnailPanel
 from .inspector_panel import InspectorPanel
@@ -11,6 +13,7 @@ from pdf_loader import PDFLoader
 from layout_analyzer import LayoutAnalyzer
 from export.pdf_writer import PDFWriter
 from export.pikepdf_writer import PikePDFWriter
+from omar_format import OmarFormat
 from utils.geometry import CoordinateConverter
 from gui.commands import AddItemCommand, DeleteItemCommand, EditTextCommand
 import os
@@ -22,7 +25,10 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
         
         # State
-        self.current_file = None
+        self.current_file = None  # Source PDF path or None
+        self.current_project_file = None  # Path to .omar file or None
+        self.source_pdf_path = None  # Original PDF for .omar projects
+        self.is_modified = False  # Track unsaved changes
         self.pdf_loader = None
         self.layout_analyzer = None
         self.page_scenes = {} # Map page_num -> EditorScene
@@ -50,8 +56,8 @@ class MainWindow(QMainWindow):
         
         # Connect Menu Actions
         self.menu_bar.action_open.triggered.connect(self.open_pdf_dialog)
-        self.menu_bar.action_save.triggered.connect(self.save_pdf)
-        self.menu_bar.action_save_as.triggered.connect(self.save_pdf_as)
+        self.menu_bar.action_save.triggered.connect(self.save_project)
+        self.menu_bar.action_save_as.triggered.connect(self.save_project_as)
         self.menu_bar.action_export.triggered.connect(self.export_pdf_dialog)
         self.menu_bar.action_exit.triggered.connect(self.close)
         
@@ -80,12 +86,16 @@ class MainWindow(QMainWindow):
         # Connect Help Actions
         self.menu_bar.action_about.triggered.connect(self.show_about_dialog)
         
+        # Connect View Actions
+        self.menu_bar.action_history.toggled.connect(self.toggle_history_panel)
+        
         # Main Layout
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(main_splitter)
         
         # Left: Editor Canvas
-        self.canvas = EditorCanvas()
+        self.canvas = EditorCanvas(undo_stack=self.undo_stack)
+        self.canvas.sceneChanged.connect(self.on_canvas_changed)
         main_splitter.addWidget(self.canvas)
         
         # Right: Panels (Splitter Vertical)
@@ -99,6 +109,12 @@ class MainWindow(QMainWindow):
         # Inspector Panel
         self.inspector_panel = InspectorPanel()
         right_splitter.addWidget(self.inspector_panel)
+        
+        # History Panel
+        self.undo_view = QUndoView(self.undo_stack)
+        self.undo_view.setWindowTitle("History")
+        self.undo_view.hide() # Hidden by default
+        right_splitter.addWidget(self.undo_view)
         
         main_splitter.addWidget(right_splitter)
         
@@ -114,6 +130,8 @@ class MainWindow(QMainWindow):
         self.inspector_panel.itemChanged.connect(self.on_inspector_item_changed)
         self.inspector_panel.tree.itemSelectionChanged.connect(self.sync_selection_to_canvas)
         self.inspector_panel.backgroundOpacityChanged.connect(self.update_background_opacity)
+        self.inspector_panel.duplicateRequested.connect(self.duplicate_items)
+        self.canvas.joinRequested.connect(self.inspector_panel.join_items)
         
         # We also need to connect the canvas selection changed signal.
         # But the scene is created dynamically in load_page.
@@ -124,7 +142,6 @@ class MainWindow(QMainWindow):
         self.load_recent_files()
 
     def load_recent_files(self):
-        from PyQt6.QtCore import QSettings
         settings = QSettings("Antigravity", "PDFVisualEditor")
         self.recent_files = settings.value("recent_files", [], type=list)
         self.update_recent_menu()
@@ -135,7 +152,6 @@ class MainWindow(QMainWindow):
         self.recent_files.insert(0, file_path)
         self.recent_files = self.recent_files[:10] # Keep last 10
         
-        from PyQt6.QtCore import QSettings
         settings = QSettings("Antigravity", "PDFVisualEditor")
         settings.setValue("recent_files", self.recent_files)
         self.update_recent_menu()
@@ -144,11 +160,17 @@ class MainWindow(QMainWindow):
         self.menu_bar.menu_recent.clear()
         for path in self.recent_files:
             action = self.menu_bar.menu_recent.addAction(path)
-            action.triggered.connect(lambda checked, p=path: self.load_pdf(p))
+            action.triggered.connect(lambda checked, p=path: self.load_file(p))
+            
+    def load_file(self, file_path):
+        """Smart load method that routes to correct loader based on extension."""
+        if file_path.lower().endswith('.omar'):
+            self.load_project(file_path)
+        else:
+            self.load_pdf(file_path)
     
     def load_theme_preference(self):
         """Load saved theme preference."""
-        from PyQt6.QtCore import QSettings
         settings = QSettings("Antigravity", "PDFVisualEditor")
         self.current_theme = settings.value("theme", "light", type=str)
         self.apply_theme(self.current_theme)
@@ -164,7 +186,6 @@ class MainWindow(QMainWindow):
                 self.current_theme = theme_name
                 
                 # Save preference
-                from PyQt6.QtCore import QSettings
                 settings = QSettings("Antigravity", "PDFVisualEditor")
                 settings.setValue("theme", theme_name)
         except FileNotFoundError:
@@ -178,6 +199,12 @@ class MainWindow(QMainWindow):
         """Show the About dialog."""
         dialog = AboutDialog(self)
         dialog.exec()
+    
+    def on_canvas_changed(self):
+        """Called when canvas scene changes (e.g., paste, delete, capture)."""
+        # Refresh the inspector to show updated elements
+        if self.canvas and self.canvas.scene:
+            self.populate_inspector_from_scene_auto(self.canvas.scene)
 
     def on_inspector_item_changed(self, item, column):
         # Handle visibility change (Column 2)
@@ -204,6 +231,60 @@ class MainWindow(QMainWindow):
         if hasattr(self.canvas, 'current_page_item') and self.canvas.current_page_item:
             self.canvas.current_page_item.setOpacity(opacity)
 
+    def duplicate_items(self, items):
+        """Duplicate the specified graphics items."""
+        if not self.canvas or not self.canvas.scene:
+            return
+            
+        # Block signals to prevent full inspector rebuild (preserves custom folders)
+        self.canvas.blockSignals(True)
+        
+        new_items = []
+        offset = 20
+        
+        try:
+            for item in items:
+                new_item = None
+                
+                if isinstance(item, QGraphicsTextItem):
+                    new_item = EditableTextItem(item.toPlainText())
+                    new_item.setFont(item.font())
+                    new_item.setDefaultTextColor(item.defaultTextColor())
+                elif isinstance(item, QGraphicsPixmapItem):
+                    new_item = ResizablePixmapItem(item.pixmap())
+                elif isinstance(item, QGraphicsRectItem):
+                    new_item = QGraphicsRectItem(item.rect())
+                    new_item.setPen(item.pen())
+                    new_item.setBrush(item.brush())
+                    new_item.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | 
+                                     QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+                
+                if new_item:
+                    # Copy common properties
+                    new_item.setPos(item.pos() + QPointF(offset, offset))
+                    new_item.setTransform(item.transform())
+                    new_item.setRotation(item.rotation())
+                    new_item.setScale(item.scale())
+                    new_item.setOpacity(item.opacity())
+                    new_item.setZValue(item.zValue() + 0.1)
+                    new_item.setVisible(item.isVisible())
+                    
+                    self.canvas.scene.addItem(new_item)
+                    new_items.append(new_item)
+                    
+                    # Manually add to inspector
+                    self.inspector_panel.add_graphics_item(new_item)
+            
+            # Update selection
+            if new_items:
+                self.canvas.scene.clearSelection()
+                for item in new_items:
+                    item.setSelected(True)
+                    
+        finally:
+            self.canvas.blockSignals(False)
+            # We do NOT call populate_inspector_from_scene_auto here to preserve structure
+
     def sync_selection_to_inspector(self):
         """Syncs canvas selection to inspector tree."""
         if self.inspector_panel.tree.signalsBlocked(): return
@@ -222,15 +303,21 @@ class MainWindow(QMainWindow):
         # Since we don't have a direct map, we search.
         # Optimization: Build a map if performance is bad.
         
-        root = self.inspector_panel.tree.topLevelItem(0)
-        if root:
-            for i in range(root.childCount()):
-                tree_item = root.child(i)
-                graphics_item = tree_item.data(0, Qt.ItemDataRole.UserRole + 1)
+        # Recursive search for items
+        def select_recursive(parent_item):
+            for i in range(parent_item.childCount()):
+                child = parent_item.child(i)
+                graphics_item = child.data(0, Qt.ItemDataRole.UserRole + 1)
                 if graphics_item in selected_items:
-                    tree_item.setSelected(True)
+                    child.setSelected(True)
                     # Ensure visible
-                    self.inspector_panel.tree.scrollToItem(tree_item)
+                    self.inspector_panel.tree.scrollToItem(child)
+                
+                # Recurse
+                select_recursive(child)
+
+        root = self.inspector_panel.tree.invisibleRootItem()
+        select_recursive(root)
                     
         self.inspector_panel.tree.blockSignals(False)
 
@@ -253,30 +340,129 @@ class MainWindow(QMainWindow):
     def toggle_capture_mode(self):
         self.canvas.start_capture_mode()
         self.status_label.setText("Capture Mode: Draw a rectangle to capture area.")
+        
+    def toggle_history_panel(self, checked):
+        self.undo_view.setVisible(checked)
     
-    def save_pdf(self):
-        """Save the current PDF with modifications."""
-        if not self.current_file:
-            QMessageBox.warning(self, "No File", "No PDF file is currently open.")
+    def save_project(self):
+        """Save the current project to .omar file."""
+        if not self.pdf_loader:
+            QMessageBox.warning(self, "No Project", "No project is currently open.")
             return
         
-        # Save to the same file
-        self.save_pdf_to_path(self.current_file)
+        if self.current_project_file:
+            # Save to existing project file
+            self.save_project_to_path(self.current_project_file)
+        else:
+            # No project file yet, prompt for location
+            self.save_project_as()
     
-    def save_pdf_as(self):
-        """Save the current PDF to a new file."""
-        if not self.current_file:
-            QMessageBox.warning(self, "No File", "No PDF file is currently open.")
+    def save_project_as(self):
+        """Save the current project to a new .omar file."""
+        if not self.pdf_loader:
+            QMessageBox.warning(self, "No Project", "No project is currently open.")
             return
         
-        out_path, _ = QFileDialog.getSaveFileName(self, "Save PDF As", "", "PDF Files (*.pdf)")
+        # Suggest filesystem based on source PDF
+        suggested_name = ""
+        if self.source_pdf_path:
+            base_name = os.path.splitext(os.path.basename(self.source_pdf_path))[0]
+            suggested_name = base_name + ".omar"
+        
+        out_path, _ = QFileDialog.getSaveFileName(
+            self, 
+            "Save Project As", 
+            suggested_name,
+            "OMAR Project Files (*.omar)"
+        )
+        
         if out_path:
-            self.save_pdf_to_path(out_path)
-            # Update current file to the new path
-            self.current_file = out_path
+            # Ensure .omar extension
+            if not out_path.endswith('.omar'):
+                out_path += '.omar'
+            
+            self.save_project_to_path(out_path)
+            self.current_project_file = out_path
+            self.is_modified = False
             self.add_recent_file(out_path)
+            self.update_window_title()
             self.status_label.setText(f"Saved: {out_path}")
     
+    def save_project_to_path(self, output_path: str):
+        """Save the project with all modifications to the specified .omar file."""
+        try:
+            # Gather all project data
+            project_data = self.gather_project_data()
+            
+            # Save using OmarFormat
+            OmarFormat.save_project(output_path, project_data)
+            
+            self.is_modified = False
+            self.update_window_title()
+            QMessageBox.information(self, "Success", "Project Saved Successfully!")
+            self.status_label.setText(f"Saved: {output_path}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Error", f"Failed to save project: {str(e)}")
+    
+    def gather_project_data(self):
+        """Gather all data needed for .omar file."""
+        pages_data = []
+        
+        # Process each page
+        for page_num in range(self.pdf_loader.get_page_count()):
+            page_data = {
+                "page_num": page_num,
+                "background_opacity": 0.5,  # Default
+                "elements": [],
+                "inspector_tree": None
+            }
+            
+            # Get elements from scene if page was visited
+            if page_num in self.page_scenes:
+                scene = self.page_scenes[page_num]
+                page_data["elements"] = self._serialize_scene_elements(scene)
+                # Get inspector tree structure
+                page_data["inspector_tree"] = self.inspector_panel.serialize_tree_structure()
+            elif page_num in self.page_elements:
+                # Use cached elements
+                page_data["elements"] = self.page_elements[page_num]
+            
+            pages_data.append(page_data)
+        
+        # Get page order from thumbnail panel
+        page_order = self.thumbnail_panel.get_page_order()
+        
+        return {
+            "source_pdf": {
+                "path": self.source_pdf_path or self.current_file,
+                "embedded": False,
+                "data": None
+           },
+            "settings": {
+                "theme": self.current_theme,
+                "current_page": 0  
+            },
+            "pages": pages_data,
+            "page_order": page_order
+        }
+    
+    def _serialize_scene_elements(self, scene):
+        """Serialize all elements in a scene."""
+        from .editor_canvas import ResizerHandle
+        
+        elements = []
+        for item in scene.items():
+            if item.zValue() == -100: continue  # Skip background
+            if isinstance(item, ResizerHandle): continue
+            
+            element_data = OmarFormat.serialize_graphics_item(item)
+            if element_data:
+                elements.append(element_data)
+        
+        return elements
+
     def save_pdf_to_path(self, output_path: str):
         """Save the PDF with all modifications to the specified path."""
         try:
@@ -401,9 +587,15 @@ class MainWindow(QMainWindow):
         return elements
 
     def open_pdf_dialog(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF Files (*.pdf)")
+        """Open file dialog supporting both .omar projects and .pdf files."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Open File", 
+            "", 
+            "All Supported Files (*.omar *.pdf);;OMAR Projects (*.omar);;PDF Files (*.pdf)"
+        )
         if file_path:
-            self.load_pdf(file_path)
+            self.load_file(file_path)
 
     def load_pdf(self, file_path):
         try:
@@ -411,6 +603,10 @@ class MainWindow(QMainWindow):
                 self.pdf_loader.close()
                 
             self.current_file = file_path
+            self.source_pdf_path = file_path  # Store as source for .omar project
+            self.current_project_file = None  # New PDF = unsaved project
+            self.is_modified = False
+            
             self.pdf_loader = PDFLoader(file_path)
             self.layout_analyzer = LayoutAnalyzer(file_path)
             
@@ -430,10 +626,238 @@ class MainWindow(QMainWindow):
                 self.load_page(0)
                 
             self.add_recent_file(file_path)
+            self.update_window_title()
             self.status_label.setText(f"Loaded: {file_path}")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load PDF: {str(e)}")
+    
+    def update_window_title(self):
+        """Update window title based on project state."""
+        if self.current_project_file:
+            # Show .omar project name
+            project_name = os.path.basename(self.current_project_file)
+            modified_marker = "*" if self.is_modified else ""
+            self.setWindowTitle(f"{project_name}{modified_marker} - PDF Visual Editor")
+        elif self.source_pdf_path:
+            # Unsaved project from PDF
+            self.setWindowTitle("Untitled* - PDF Visual Editor")
+        else:
+            # No project
+            self.setWindowTitle("PDF Visual Editor")
+    
+    def load_project(self, filepath: str):
+        """Load a .omar project file."""
+        try:
+            # Validate this is actually a .omar file
+            if not filepath.lower().endswith('.omar'):
+                QMessageBox.warning(self, "Invalid File", "Please select a .omar project file.")
+                return
+            
+            # Load project data
+            project_data = OmarFormat.load_project(filepath)
+            
+            # Get source PDF path
+            source_pdf = project_data.get("source_pdf", {})
+            pdf_path = source_pdf.get("path", "")
+            
+            # Validate PDF path
+            if not pdf_path:
+                QMessageBox.warning(
+                    self, 
+                    "Invalid Project", 
+                    "Project file does not contain a valid PDF path."
+                )
+                return
+            
+            # Check if PDF exists
+            if not os.path.exists(pdf_path):
+                response = QMessageBox.question(
+                    self, 
+                    "PDF Not Found", 
+                    f"Source PDF not found:\n{pdf_path}\n\nWould you like to locate it?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if response == QMessageBox.StandardButton.Yes:
+                    # Let user browse for PDF
+                    new_pdf_path, _ = QFileDialog.getOpenFileName(
+                        self, 
+                        "Locate Source PDF", 
+                        os.path.dirname(pdf_path) if os.path.dirname(pdf_path) else "",
+                        "PDF Files (*.pdf)"
+                    )
+                    if new_pdf_path:
+                        pdf_path = new_pdf_path
+                    else:
+                        return
+                else:
+                    return
+            
+            # Load the source PDF first
+            if self.pdf_loader:
+                self.pdf_loader.close()
+            
+            self.source_pdf_path = pdf_path
+            self.current_file = pdf_path
+            self.current_project_file = filepath
+            self.is_modified = False
+            
+            self.pdf_loader = PDFLoader(pdf_path)
+            self.layout_analyzer = LayoutAnalyzer(pdf_path)
+            
+            # Clear UI
+            self.thumbnail_panel.clear()
+            self.inspector_panel.clear()
+            self.page_scenes = {}
+            self.page_elements = {}
+            self.scene_cache_order = []
+            
+            # Load thumbnails
+            for i in range(self.pdf_loader.get_page_count()):
+                pixmap = self.pdf_loader.get_page_pixmap(i, scale=0.2)
+                self.thumbnail_panel.add_page(pixmap, i)
+            
+            # Restore pages data
+            pages_data = project_data.get("pages", [])
+            for page_data in pages_data:
+                page_num = page_data.get("page_num", 0)
+                self.page_elements[page_num] = page_data.get("elements", [])
+            
+            # Load first page
+            if self.pdf_loader.get_page_count() > 0:
+                self.load_page_from_project(0, project_data)
+            
+            # Restore settings
+            settings = project_data.get("settings", {})
+            theme = settings.get("theme", "light")
+            if theme != self.current_theme:
+                self.apply_theme(theme)
+            
+            self.add_recent_file(filepath)
+            self.update_window_title()
+            self.status_label.setText(f"Loaded project: {filepath}")
+            
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print("="*80)
+            print("ERROR LOADING .OMAR PROJECT:")
+            print(error_details)
+            print("="*80)
+            QMessageBox.critical(self, "Error", f"Failed to load project:\n\n{str(e)}\n\nCheck console for details.")
+    
+    def load_page_from_project(self, page_num, project_data):
+        """Load a page with data from project file (no auto-organization)."""
+        if not self.pdf_loader:
+            return
+        
+        # Create new scene
+        scene = EditorScene(self.canvas, undo_stack=self.undo_stack)
+        self.page_scenes[page_num] = scene
+        self.scene_cache_order.append(page_num)
+        self.canvas.set_scene(scene)
+        
+        # Connect selection signal
+        scene.selectionChanged.connect(self.sync_selection_to_inspector)
+        
+        # Render Page Background
+        pixmap = self.pdf_loader.get_page_pixmap(page_num, scale=1.5)
+        bg_item = QGraphicsPixmapItem(pixmap)
+        bg_item.setZValue(-100)
+        bg_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        bg_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        
+        # Restore background opacity
+        pages_data = project_data.get("pages", [])
+        bg_opacity = 0.5  # default
+        for page_data in pages_data:
+            if page_data.get("page_num") == page_num:
+                bg_opacity = page_data.get("background_opacity", 0.5)
+                break
+        
+        bg_item.setOpacity(bg_opacity)
+        scene.addItem(bg_item)
+        scene.setSceneRect(QRectF(pixmap.rect()))
+        self.canvas.current_page_item = bg_item
+        
+        # Update inspector slider
+        self.inspector_panel.set_background_opacity_value(bg_opacity)
+        
+        # Restore elements from project data
+        if page_num in self.page_elements:
+            self._restore_elements_to_scene(scene, self.page_elements[page_num])
+        
+        # Populate inspector (will use saved structure if available)
+        # For now, use auto-organize - full structure restoration can be added later
+        self.populate_inspector_from_scene_auto(scene)
+    
+    def _restore_elements_to_scene(self, scene, elements_data):
+        """Restore graphics items from serialized element data."""
+        from .editor_canvas import EditableTextItem, ResizablePixmapItem
+        import base64
+        
+        for element_data in elements_data:
+            item = None
+            element_type = element_data.get("type")
+            
+            if element_type == "text":
+                # Restore text item
+                text = element_data.get("text", "")
+                item = EditableTextItem(text)
+                
+                # Restore font
+                font = item.font()
+                font.setFamily(element_data.get("font_family", "Arial"))
+                font.setPointSize(int(element_data.get("font_size", 12)))
+                font.setBold(element_data.get("font_bold", False))
+                font.setItalic(element_data.get("font_italic", False))
+                item.setFont(font)
+                
+            elif element_type == "image":
+                # Restore image item
+                image_data_b64 = element_data.get("image_data", "")
+                if image_data_b64:
+                    try:
+                        image_bytes = base64.b64decode(image_data_b64)
+                        pixmap = QPixmap()
+                        pixmap.loadFromData(image_bytes)
+                        item = ResizablePixmapItem(pixmap)
+                    except Exception as e:
+                        print(f"Failed to restore image: {e}")
+                        continue
+            
+            elif element_type == "shape":
+                # Restore shape/rect
+                width = element_data.get("width", 100)
+                height = element_data.get("height", 100)
+                item = QGraphicsRectItem(0, 0, width, height)
+                item.setPen(QPen(Qt.GlobalColor.blue))
+                item.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | 
+                             QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+            
+            if item:
+                # Restore common properties
+                pos_x = element_data.get("x", 0)
+                pos_y = element_data.get("y", 0)
+                item.setPos(pos_x, pos_y)
+                
+                # Restore transform
+                transform_matrix = element_data.get("transform_matrix", [1, 0, 0, 1, 0, 0])
+                if len(transform_matrix) == 6:
+                    transform = QTransform(
+                        transform_matrix[0], transform_matrix[1],
+                        transform_matrix[2], transform_matrix[3],
+                        transform_matrix[4], transform_matrix[5]
+                    )
+                    item.setTransform(transform)
+                
+                # Restore opacity and visibility
+                item.setOpacity(element_data.get("opacity", 1.0))
+                item.setVisible(element_data.get("visible", True))
+                item.setZValue(element_data.get("z_value", 0))
+                
+                scene.addItem(item)
 
     def save_scene_to_data(self, page_num):
         """Serialize scene data before evicting from cache."""
@@ -463,7 +887,7 @@ class MainWindow(QMainWindow):
             del self.page_scenes[lru_page]
 
         # Create new scene
-        scene = EditorScene(self.canvas)
+        scene = EditorScene(self.canvas, undo_stack=self.undo_stack)
         self.page_scenes[page_num] = scene
         self.scene_cache_order.append(page_num)
         self.canvas.set_scene(scene)
@@ -551,7 +975,12 @@ class MainWindow(QMainWindow):
                     item.setData(Qt.ItemDataRole.UserRole, el)
                     item.setData(Qt.ItemDataRole.UserRole + 2, i) # Original Index
 
-        self.populate_inspector_from_scene(scene)
+
+        self.populate_inspector_from_scene_auto(scene)
+
+    def populate_inspector_from_scene_auto(self, scene):
+        """Populate inspector with auto-organization (for PDF imports)."""
+        self.inspector_panel.populate_from_scene_auto_organize(scene)
 
     def populate_inspector_from_scene(self, scene):
         self.inspector_panel.clear()
@@ -651,7 +1080,13 @@ class MainWindow(QMainWindow):
                 
             item = ResizablePixmapItem(pixmap)
             item.setPos(100, 100)
-            self.canvas.scene.addItem(item)
+            
+            if self.undo_stack:
+                from gui.commands import AddItemCommand
+                cmd = AddItemCommand(self.canvas.scene, item, "Insert Image")
+                self.undo_stack.push(cmd)
+            else:
+                self.canvas.scene.addItem(item)
             
             # Add to inspector (simplified)
             self.populate_inspector_from_scene(self.canvas.scene)
@@ -703,7 +1138,13 @@ class MainWindow(QMainWindow):
             
         item = ResizablePixmapItem(pixmap)
         item.setPos(x, y)
-        self.canvas.scene.addItem(item)
+        
+        if self.undo_stack:
+            from gui.commands import AddItemCommand
+            cmd = AddItemCommand(self.canvas.scene, item, "Drop Image")
+            self.undo_stack.push(cmd)
+        else:
+            self.canvas.scene.addItem(item)
         
         # Update inspector
         self.populate_inspector_from_scene(self.canvas.scene)

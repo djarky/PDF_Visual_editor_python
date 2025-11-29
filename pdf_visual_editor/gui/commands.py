@@ -2,9 +2,7 @@
 Undo/Redo commands for the PDF Visual Editor.
 Each command encapsulates a single operation that can be undone and redone.
 """
-from PyQt6.QtGui import QUndoCommand
-from PyQt6.QtCore import QPointF
-from PyQt6.QtWidgets import QGraphicsItem
+from qt_compat import QUndoCommand, QPointF, QGraphicsItem
 
 
 class MoveItemCommand(QUndoCommand):
@@ -33,7 +31,7 @@ class ResizeItemCommand(QUndoCommand):
         self.new_rect = new_rect
     
     def undo(self):
-        from PyQt6.QtWidgets import QGraphicsRectItem
+        from qt_compat import QGraphicsRectItem
         if isinstance(self.item, QGraphicsRectItem):
             self.item.setRect(self.old_rect)
     
@@ -55,6 +53,8 @@ class AddItemCommand(QUndoCommand):
     def undo(self):
         if self.item in self.scene.items():
             self.scene.removeItem(self.item)
+            self.was_added = False
+    
             self.was_added = False
     
     def redo(self):

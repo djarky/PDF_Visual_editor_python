@@ -1,6 +1,7 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider, QStyledItemDelegate, QStyleOptionViewItem, QLabel, QHBoxLayout
-from PyQt6.QtCore import Qt, pyqtSignal, QMimeData, QModelIndex
-from PyQt6.QtGui import QIcon
+from qt_compat import (QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QHeaderView, 
+                       QAbstractItemView, QPushButton, QMenu, QSlider, QStyledItemDelegate, 
+                       QStyleOptionViewItem, QLabel, QHBoxLayout, Qt, Signal, QMimeData, 
+                       QModelIndex, QIcon, QAction)
 
 class OpacitySliderDelegate(QStyledItemDelegate):
     """Custom delegate to display a slider for opacity values."""
@@ -43,6 +44,14 @@ class OpacitySliderDelegate(QStyledItemDelegate):
             return "100%"
 
 class InspectorTreeWidget(QTreeWidget):
+    deleteKeyPressed = Signal()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Delete:
+            self.deleteKeyPressed.emit()
+        else:
+            super().keyPressEvent(event)
+
     def mimeData(self, items):
         # Custom mimeData to avoid serializing QGraphicsItem pointers
         mime = QMimeData()
@@ -107,8 +116,9 @@ class InspectorPanel(QWidget):
     Panel showing a tree view of elements on the current page.
     Supports layers, visibility, and opacity.
     """
-    itemChanged = pyqtSignal(object, int) # Item, Column
-    backgroundOpacityChanged = pyqtSignal(float)
+    itemChanged = Signal(object, int) # Item, Column
+    backgroundOpacityChanged = Signal(float)
+    duplicateRequested = Signal(list) # List of QGraphicsItems
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -139,7 +149,10 @@ class InspectorPanel(QWidget):
         self.tree.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         
+        self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        
         self.tree.itemChanged.connect(self._on_item_changed)
+        self.tree.deleteKeyPressed.connect(self.delete_items)
         
         layout.addWidget(self.tree)
         
@@ -162,12 +175,18 @@ class InspectorPanel(QWidget):
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_context_menu)
 
+        # Shortcuts
+        self.join_action = QAction("Join into Folder", self)
+        self.join_action.setShortcut("Ctrl+J")
+        self.join_action.triggered.connect(self.join_items)
+        self.addAction(self.join_action)
+
     def show_context_menu(self, position):
         """Show context menu on right-click."""
         menu = QMenu(self.tree)
         
-        copy_action = menu.addAction("Copy")
-        paste_action = menu.addAction("Paste")
+        duplicate_action = menu.addAction("Duplicate")
+        join_action = menu.addAction("Join into Folder (Ctrl+J)")
         menu.addSeparator()
         create_folder_action = menu.addAction("Create Folder")
         menu.addSeparator()
@@ -175,64 +194,106 @@ class InspectorPanel(QWidget):
         
         # Enable/disable based on selection
         has_selection = bool(self.tree.selectedItems())
-        copy_action.setEnabled(has_selection)
+        duplicate_action.setEnabled(has_selection)
+        join_action.setEnabled(has_selection)
         delete_action.setEnabled(has_selection)
         
         action = menu.exec(self.tree.viewport().mapToGlobal(position))
         
-        if action == copy_action:
-            self.copy_items()
-        elif action == paste_action:
-            self.paste_items()
+        if action == duplicate_action:
+            self.duplicate_items()
+        elif action == join_action:
+            self.join_items()
         elif action == create_folder_action:
             self.create_folder()
         elif action == delete_action:
             self.delete_items()
 
-    def copy_items(self):
-        """Copy selected items to internal clipboard."""
+    def duplicate_items(self):
+        """Request duplication of selected items."""
         selected = self.tree.selectedItems()
         if not selected:
             return
-        # Store references
-        self.clipboard_items = selected[:]
-
-    def paste_items(self):
-        """Paste items from clipboard under current selection or root."""
-        if not hasattr(self, 'clipboard_items') or not self.clipboard_items:
-            return
         
-        # Determine target
+        items_to_duplicate = []
+        for item in selected:
+            graphics_item = item.data(0, Qt.ItemDataRole.UserRole + 1)
+            if graphics_item:
+                items_to_duplicate.append(graphics_item)
+        
+        if items_to_duplicate:
+            self.duplicateRequested.emit(items_to_duplicate)
+
+    def join_items(self):
+        """Join selected items into a new folder."""
         selected = self.tree.selectedItems()
-        if selected:
-            target = selected[0]
-            # If target is a folder, paste as child. Otherwise paste as sibling.
-            if target.childCount() > 0 or target.text(1) == "folder":
-                parent = target
-            else:
-                parent = target.parent() if target.parent() else self.tree.invisibleRootItem()
-        else:
-            # Paste at root
-            root = self.tree.topLevelItem(0)
-            parent = root if root else self.tree.invisibleRootItem()
-        
-        # Duplicate items (shallow copy for now)
-        for item in self.clipboard_items:
-            self.duplicate_tree_item(item, parent)
+        if not selected:
+            return
 
-    def duplicate_tree_item(self, source_item, target_parent):
-        """Duplicate a tree item and add to target parent."""
-        new_item = QTreeWidgetItem(target_parent)
-        for col in range(source_item.columnCount()):
-            new_item.setText(col, source_item.text(col))
-        new_item.setCheckState(2, source_item.checkState(2))
-        new_item.setFlags(source_item.flags())
+        # Determine parent for the new folder
+        # Use the parent of the first selected item
+        first_item = selected[0]
+        parent = first_item.parent()
+        if not parent:
+            parent = self.tree.invisibleRootItem()
+            # Try to find "Page Content" root if we are at top level
+            if parent.childCount() > 0 and parent.child(0).text(0) == "Page Content":
+                 parent = parent.child(0)
+
+        # Create new folder
+        folder_item = QTreeWidgetItem(parent)
+        folder_item.setText(0, "New Folder")
+        folder_item.setText(1, "folder")
+        folder_item.setCheckState(2, Qt.CheckState.Checked)
+        folder_item.setText(3, "1.0")
+        folder_item.setFlags(folder_item.flags() | Qt.ItemFlag.ItemIsEditable)
+        folder_item.setExpanded(True)
         
-        # Copy user data
-        new_item.setData(0, Qt.ItemDataRole.UserRole, source_item.data(0, Qt.ItemDataRole.UserRole))
+        # Move items into folder
+        for item in selected:
+            # Remove from current parent
+            curr_parent = item.parent()
+            if curr_parent:
+                curr_parent.removeChild(item)
+            else:
+                self.tree.invisibleRootItem().removeChild(item)
+            
+            # Add to new folder
+            folder_item.addChild(item)
+
+    def add_graphics_item(self, graphics_item):
+        """Add a single graphics item to the tree without rebuilding."""
+        # Find appropriate folder based on type
+        root = self.tree.invisibleRootItem()
+        page_content = None
+        for i in range(root.childCount()):
+            if root.child(i).text(0) == "Page Content":
+                page_content = root.child(i)
+                break
         
-        # Note: Graphics item reference is NOT copied - this creates a duplicate tree entry
-        # but not a duplicate graphics item. For actual duplication, MainWindow would need to handle it.
+        if not page_content:
+            # Should not happen if initialized, but safety check
+            return
+
+        target_folder = page_content # Default
+        
+        # Try to find specific folders
+        from qt_compat import QGraphicsTextItem, QGraphicsPixmapItem
+        
+        folder_name = "⬜ Shapes"
+        if isinstance(graphics_item, QGraphicsTextItem):
+            folder_name = "📝 Text"
+        elif isinstance(graphics_item, QGraphicsPixmapItem):
+            folder_name = "🖼️ Images"
+            
+        for i in range(page_content.childCount()):
+            if page_content.child(i).text(0) == folder_name:
+                target_folder = page_content.child(i)
+                break
+        
+        # Create item
+        tree_item = self._create_tree_item_for_graphics_item(graphics_item)
+        target_folder.addChild(tree_item)
 
     def create_folder(self):
         """Create a new folder/group in the tree."""
@@ -323,3 +384,138 @@ class InspectorPanel(QWidget):
         self.bg_slider.setValue(value)
         self.bg_label.setText(f"{value}%")
         self.bg_slider.blockSignals(False)
+    
+    def populate_from_scene_auto_organize(self, scene):
+        """
+        Populate inspector with auto-organized folders by element type (PDF import).
+        Creates folders for Text, Images, and Shapes.
+        """
+        from .editor_canvas import ResizablePixmapItem, ResizerHandle
+        from qt_compat import QGraphicsTextItem, QGraphicsPixmapItem
+        
+        self.clear()
+        
+        root = QTreeWidgetItem(self.tree)
+        root.setText(0, "Page Content")
+        root.setExpanded(True)
+        
+        # Create folders for each type
+        text_folder = QTreeWidgetItem(root)
+        text_folder.setText(0, "📝 Text")
+        text_folder.setExpanded(True)
+        
+        image_folder = QTreeWidgetItem(root)
+        image_folder.setText(0, "🖼️ Images")
+        image_folder.setExpanded(True)
+        
+        shape_folder = QTreeWidgetItem(root)
+        shape_folder.setText(0, "⬜ Shapes")
+        shape_folder.setExpanded(True)
+        
+        # Sort items into folders
+        for item in scene.items():
+            if item.zValue() == -100: continue  # Skip background
+            if isinstance(item, ResizerHandle): continue
+            
+            tree_item = self._create_tree_item_for_graphics_item(item)
+            
+            if isinstance(item, QGraphicsTextItem):
+                text_folder.addChild(tree_item)
+            elif isinstance(item, QGraphicsPixmapItem):
+                image_folder.addChild(tree_item)
+            else:
+                shape_folder.addChild(tree_item)
+    
+    def _create_tree_item_for_graphics_item(self, graphics_item):
+        """Create a tree widget item for a graphics item."""
+        from qt_compat import QGraphicsTextItem, QGraphicsPixmapItem
+        
+        tree_item = QTreeWidgetItem()
+        
+        if isinstance(graphics_item, QGraphicsTextItem):
+            text = graphics_item.toPlainText()
+            tree_item.setText(0, text[:20] if len(text) > 20 else text)
+            tree_item.setText(1, "text")
+        elif isinstance(graphics_item, QGraphicsPixmapItem):
+            tree_item.setText(0, "Image")
+            tree_item.setText(1, "image")
+        else:
+            tree_item.setText(0, "Shape")
+            tree_item.setText(1, "shape")
+        
+        tree_item.setCheckState(2, Qt.CheckState.Checked if graphics_item.isVisible() else Qt.CheckState.Unchecked)
+        tree_item.setText(3, str(graphics_item.opacity()))
+        tree_item.setFlags(tree_item.flags() | Qt.ItemFlag.ItemIsEditable)
+        
+        # Link to graphics item
+        tree_item.setData(0, Qt.ItemDataRole.UserRole + 1, graphics_item)
+        
+        return tree_item
+    
+    def serialize_tree_structure(self):
+        """
+        Serialize current inspector tree structure for saving in .omar file.
+        
+        Returns:
+            Dictionary with folder structure and hierarchy
+        """
+        folders = []
+        self._serialize_folder_recursive(self.tree.invisibleRootItem(), [], folders)
+        
+        return {
+            "folders": folders,
+            "element_count": self._count_elements()
+        }
+    
+    def _serialize_folder_recursive(self, parent_item, parent_path, folders_list):
+        """Recursively serialize folder structure."""
+        for i in range(parent_item.childCount()):
+            item = parent_item.child(i)
+            folder_name = item.text(0)
+            
+            # Check if this is a folder (has children) or an element
+            if item.childCount() > 0:
+                # This is a folder
+                folder_data = {
+                    "name": folder_name,
+                    "expanded": item.isExpanded(),
+                    "parent_path": parent_path.copy(),
+                    "items": []
+                }
+                
+                # Process children
+                new_path = parent_path + [folder_name]
+                for j in range(item.childCount()):
+                    child = item.child(j)
+                    if child.childCount() == 0:  # Leaf element
+                        # Get opacity with fallback to 1.0 if empty or invalid
+                        try:
+                            opacity = float(child.text(3)) if child.text(3) else 1.0
+                        except (ValueError, TypeError):
+                            opacity = 1.0
+                        
+                        folder_data["items"].append({
+                            "name": child.text(0),
+                            "type": child.text(1),
+                            "visible": child.checkState(2) == Qt.CheckState.Checked,
+                            "opacity": opacity
+                        })
+                    else:
+                        # Nested folder - recurse
+                        self._serialize_folder_recursive(item, new_path, folders_list)
+                
+                folders_list.append(folder_data)
+    
+    def _count_elements(self):
+        """Count total number of elements in tree."""
+        count = 0
+        
+        def count_recursive(item):
+            nonlocal count
+            if item.childCount() == 0 and item.parent() is not None:
+                count += 1
+            for i in range(item.childCount()):
+                count_recursive(item.child(i))
+        
+        count_recursive(self.tree.invisibleRootItem())
+        return count

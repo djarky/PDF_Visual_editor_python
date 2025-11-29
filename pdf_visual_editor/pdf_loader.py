@@ -1,5 +1,5 @@
 import fitz  # PyMuPDF
-from PyQt6.QtGui import QImage, QPixmap
+from qt_compat import QImage, QPixmap, QT_API
 
 class PDFLoader:
     """
@@ -23,12 +23,21 @@ class PDFLoader:
         matrix = fitz.Matrix(scale, scale)
         pix = page.get_pixmap(matrix=matrix)
         
-        # Convert to QImage
-        img_format = QImage.Format.Format_RGB888
-        image = QImage(pix.samples, pix.width, pix.height, pix.stride, img_format)
+        # Convert to QImage with explicit data copy for PySide2 compatibility
+        # Create Python bytes object to ensure proper memory ownership
+        img_data = bytes(pix.samples)
         
-        # Copy to ensure data ownership is transferred properly
-        return QPixmap.fromImage(image.copy())
+        # Use correct enum syntax based on Qt framework
+        if QT_API == "PyQt6":
+            img_format = QImage.Format.Format_RGB888
+        else:  # PySide2
+            img_format = QImage.Format_RGB888
+        
+        bytes_per_line = pix.width * 3  # RGB888 = 3 bytes per pixel
+        qimage = QImage(img_data, pix.width, pix.height, bytes_per_line, img_format)
+        
+        # Convert to QPixmap
+        return QPixmap.fromImage(qimage)
 
     def get_page_size(self, page_num: int):
         """Returns (width, height) of the page."""
@@ -79,10 +88,20 @@ class PDFLoader:
         mat = fitz.Matrix(scale, scale)
         pix = page.get_pixmap(matrix=mat, clip=rect)
         
-        # Convert to QPixmap
-        img_format = QImage.Format.Format_RGBA8888 if pix.alpha else QImage.Format.Format_RGB888
-        image = QImage(pix.samples, pix.width, pix.height, pix.stride, img_format)
-        return QPixmap.fromImage(image.copy())
+        # Convert to QPixmap with explicit data copy for PySide2 compatibility
+        # Create Python bytes object to ensure proper memory ownership
+        img_data = bytes(pix.samples)
+        
+        # Use correct enum syntax based on Qt framework
+        if QT_API == "PyQt6":
+            img_format = QImage.Format.Format_RGBA8888 if pix.alpha else QImage.Format.Format_RGB888
+        else:  # PySide2
+            img_format = QImage.Format_RGBA8888 if pix.alpha else QImage.Format_RGB888
+        
+        bytes_per_line = pix.width * (4 if pix.alpha else 3)  # RGBA = 4, RGB = 3 bytes per pixel
+        qimage = QImage(img_data, pix.width, pix.height, bytes_per_line, img_format)
+        
+        return QPixmap.fromImage(qimage)
 
     def close(self):
         if self.doc:

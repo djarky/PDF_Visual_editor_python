@@ -1,5 +1,14 @@
+# Qt Framework - Install ONE of the following:
+# For modern systems (Python 3.9+): pip install PyQt6
+# For older systems: pip install PySide2
+PyQt6>=6.6.0; python_version >= "3.8"
+PySide2; python_version < "3.8"
+
+# PDF Libraries
 PyMuPDF>=1.23.0
 pdfminer.six>=20221105
 pikepdf>=8.0.0
-PyQt6>=6.6.0
 Pillow>=10.0.0
+
+# Backports for older Python versions
+importlib-metadata>=6.0.0; python_version < "3.8"

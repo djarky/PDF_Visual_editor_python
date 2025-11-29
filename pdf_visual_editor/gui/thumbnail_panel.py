@@ -1,12 +1,11 @@
-from PyQt6.QtWidgets import QListWidget, QListWidgetItem, QWidget, QVBoxLayout
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QIcon
+from qt_compat import (QListWidget, QListWidgetItem, QWidget, QVBoxLayout,
+                       Qt, Signal, QSize, QIcon)
 
 class ThumbnailPanel(QWidget):
     """
     Panel showing thumbnails of PDF pages.
     """
-    pageSelected = pyqtSignal(int)
+    pageSelected = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)

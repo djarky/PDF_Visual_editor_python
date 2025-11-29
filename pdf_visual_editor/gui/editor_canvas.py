@@ -1,21 +1,62 @@
-from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem, QMenu
-from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QRectF
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QMouseEvent, QTransform, QKeySequence, QPixmap, QDrag
+from qt_compat import (QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsRectItem, 
+                       QGraphicsTextItem, QGraphicsItem, QMenu, Qt, Signal, QPointF, QRectF,
+                       QPainter, QPen, QColor, QBrush, QMouseEvent, QTransform, QKeySequence, 
+                       QPixmap, QDrag, QApplication, QMimeData)
 
 class EditorScene(QGraphicsScene):
-    itemSelected = pyqtSignal(object)
+    itemSelected = Signal(object)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, undo_stack=None):
         super().__init__(parent)
         self.setBackgroundBrush(QBrush(QColor("#e0e0e0")))
+        self.undo_stack = undo_stack
+        self.item_move_start_pos = {}  # Track initial positions for undo
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
-        item = self.itemAt(event.scenePos(), QTransform())
-        if item:
-            self.itemSelected.emit(item)
-        else:
-            self.itemSelected.emit(None)
+        
+        # Track initial positions of all selected items
+        # We do this AFTER super() so that selection is updated
+        self.item_move_start_pos.clear()
+        for item in self.selectedItems():
+            if item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable:
+                self.item_move_start_pos[item] = item.pos()
+    
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        
+        # Check for completed moves and create undo command
+        # Fallback: Try to get undo_stack from view if missing
+        stack = self.undo_stack
+        if stack is None and self.views():
+            view = self.views()[0]
+            if hasattr(view, 'undo_stack'):
+                stack = view.undo_stack
+        
+        if stack is not None and self.item_move_start_pos:
+            # We can group multiple moves into a macro if needed
+            # For now, let's push individual commands or a macro
+            
+            moved_items = []
+            for item, old_pos in self.item_move_start_pos.items():
+                new_pos = item.pos()
+                if old_pos != new_pos:
+                    moved_items.append((item, old_pos, new_pos))
+            
+            if moved_items:
+                if len(moved_items) > 1:
+                    stack.beginMacro("Move Items")
+                    
+                from gui.commands import MoveItemCommand
+                for item, old_pos, new_pos in moved_items:
+                    cmd = MoveItemCommand(item, old_pos, new_pos)
+                    stack.push(cmd)
+                    
+                if len(moved_items) > 1:
+                    stack.endMacro()
+        
+        # Clear tracking
+        self.item_move_start_pos.clear()
 
 class EditableTextItem(QGraphicsTextItem):
     def __init__(self, text, parent=None):
@@ -89,10 +130,42 @@ class ResizerHandle(QGraphicsRectItem):
             pos = self.position_func(self.parent_item.boundingRect())
             self.setPos(pos)
 
+    def mousePressEvent(self, event):
+        # Capture start state
+        if self.parent_item:
+            from qt_compat import QGraphicsRectItem
+            if isinstance(self.parent_item, QGraphicsRectItem):
+                self.start_rect = self.parent_item.rect()
+            else:
+                self.start_transform = self.parent_item.transform()
+        super().mousePressEvent(event)
+
     def mouseMoveEvent(self, event):
         # Delegate to parent's resize handler
         if self.parent_item and hasattr(self.parent_item, 'handle_resize'):
             self.parent_item.handle_resize(self, event.scenePos())
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        
+        if not self.parent_item:
+            return
+            
+        scene = self.parent_item.scene()
+        if not scene or not hasattr(scene, 'undo_stack') or not scene.undo_stack:
+            return
+            
+        from qt_compat import QGraphicsRectItem
+        from gui.commands import ResizeItemCommand, ScaleItemCommand
+        
+        if isinstance(self.parent_item, QGraphicsRectItem):
+            if hasattr(self, 'start_rect') and self.start_rect != self.parent_item.rect():
+                cmd = ResizeItemCommand(self.parent_item, self.start_rect, self.parent_item.rect())
+                scene.undo_stack.push(cmd)
+        else:
+            if hasattr(self, 'start_transform') and self.start_transform != self.parent_item.transform():
+                cmd = ScaleItemCommand(self.parent_item, self.start_transform, self.parent_item.transform())
+                scene.undo_stack.push(cmd)
 
 class ResizableMixin:
     """Mixin to add resize handles to a QGraphicsItem."""
@@ -296,6 +369,7 @@ class EditableTextItem(QGraphicsTextItem, ResizableMixin):
             self.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
             self.setFocus()
             self.is_editing = True
+            self.old_text = self.toPlainText() # Capture old text
             self.setDefaultTextColor(QColor(0, 0, 0))
             cursor = self.textCursor()
             cursor.select(cursor.SelectionType.Document)
@@ -311,6 +385,16 @@ class EditableTextItem(QGraphicsTextItem, ResizableMixin):
             cursor.clearSelection()
             self.setTextCursor(cursor)
             self.update()
+            
+            # Check for changes and push undo command
+            new_text = self.toPlainText()
+            if hasattr(self, 'old_text') and self.old_text != new_text:
+                scene = self.scene()
+                if scene and hasattr(scene, 'undo_stack') and scene.undo_stack:
+                    from gui.commands import EditTextCommand
+                    cmd = EditTextCommand(self, self.old_text, new_text)
+                    scene.undo_stack.push(cmd)
+                    
         super().focusOutEvent(event)
 
     def keyPressEvent(self, event):
@@ -343,10 +427,14 @@ class EditorCanvas(QGraphicsView):
     """
     The central widget for editing PDF pages.
     """
-    def __init__(self, parent=None):
+    sceneChanged = Signal()  # Signal to notify when scene content changes
+    joinRequested = Signal() # Signal to request joining items (Ctrl+J)
+    
+    def __init__(self, parent=None, undo_stack=None):
         super().__init__(parent)
-        self.scene = EditorScene(self)
+        self.scene = EditorScene(self, undo_stack=undo_stack)
         self.setScene(self.scene)
+        self.undo_stack = undo_stack  # Store undo stack reference
         
         # Graphics View settings
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -363,6 +451,9 @@ class EditorCanvas(QGraphicsView):
         self.capture_rect_item = None
 
     def set_scene(self, scene):
+        # Set the undo_stack for this scene if it doesn't have one already
+        if self.undo_stack and not scene.undo_stack:
+            scene.undo_stack = self.undo_stack
         self.scene = scene
         self.setScene(self.scene)
 
@@ -458,11 +549,21 @@ class EditorCanvas(QGraphicsView):
             # Create new item
             item = ResizablePixmapItem(cropped_pixmap)
             item.setPos(rect.topLeft())
-            self.scene.addItem(item)
+            
+            # Use undo command if available
+            if self.undo_stack:
+                from gui.commands import AddItemCommand
+                cmd = AddItemCommand(self.scene, item, "Capture Area")
+                self.undo_stack.push(cmd)
+            else:
+                self.scene.addItem(item)
             
             # Select it
             self.scene.clearSelection()
             item.setSelected(True)
+            
+            # Notify inspector
+            self.sceneChanged.emit()
 
     def load_page_image(self, pixmap):
         self.scene.clear()
@@ -482,18 +583,30 @@ class EditorCanvas(QGraphicsView):
         font.setPointSize(int(font_size))
         item.setFont(font)
         
-        self.scene.addItem(item)
+        if self.undo_stack:
+            from gui.commands import AddItemCommand
+            cmd = AddItemCommand(self.scene, item, "Add Text")
+            self.undo_stack.push(cmd)
+        else:
+            self.scene.addItem(item)
         return item
 
     def add_rect_element(self, x, y, w, h):
         item = QGraphicsRectItem(x, y, w, h)
         item.setPen(QPen(Qt.GlobalColor.blue))
         item.setFlags(QGraphicsItem.GraphicsItemFlag.ItemIsMovable | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
-        self.scene.addItem(item)
+        if self.undo_stack:
+            from gui.commands import AddItemCommand
+            cmd = AddItemCommand(self.scene, item, "Add Rectangle")
+            self.undo_stack.push(cmd)
+        else:
+            self.scene.addItem(item)
         return item
 
     def keyPressEvent(self, event):
-        if event.matches(QKeySequence.StandardKey.Copy):
+        if event.matches(QKeySequence.StandardKey.Cut):
+            self.cut_selection()
+        elif event.matches(QKeySequence.StandardKey.Copy):
             self.copy_selection()
         elif event.matches(QKeySequence.StandardKey.Paste):
             self.paste_from_clipboard()
@@ -501,21 +614,26 @@ class EditorCanvas(QGraphicsView):
             self.delete_selection()
         elif event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_R:
             self.rotate_selection(90)
+        elif event.modifiers() & Qt.KeyboardModifier.ControlModifier and event.key() == Qt.Key.Key_J:
+            self.joinRequested.emit()
         else:
             super().keyPressEvent(event)
+
+    def cut_selection(self):
+        """Cut selection to clipboard (Copy + Delete)."""
+        self.copy_selection()
+        self.delete_selection()
 
     def copy_selection(self):
         items = self.scene.selectedItems()
         if not items:
             return
             
-        from PyQt6.QtWidgets import QApplication
         clipboard = QApplication.clipboard()
         mime_data = self._create_mime_data(items)
         clipboard.setMimeData(mime_data)
 
     def paste_from_clipboard(self):
-        from PyQt6.QtWidgets import QApplication
         clipboard = QApplication.clipboard()
         mime_data = clipboard.mimeData()
         
@@ -524,27 +642,49 @@ class EditorCanvas(QGraphicsView):
             image = clipboard.image()
             if not image.isNull():
                 pixmap = QPixmap.fromImage(image)
-                # Add to canvas
-                # We need to import ResizablePixmapItem here to avoid circular import at top level if not careful,
-                # but we can assume it's available or use the class defined in this file if we moved it?
-                # Actually ResizablePixmapItem is defined in this file now (or should be).
-                # Wait, ResizablePixmapItem is defined in this file.
                 
                 item = ResizablePixmapItem(pixmap)
                 # Center on view
                 center = self.mapToScene(self.viewport().rect().center())
                 item.setPos(center)
-                self.scene.addItem(item)
+                
+                # Use undo command if available
+                if self.undo_stack:
+                    from gui.commands import AddItemCommand
+                    cmd = AddItemCommand(self.scene, item, "Paste Image")
+                    self.undo_stack.push(cmd)
+                else:
+                    self.scene.addItem(item)
+                
+                # Select the new item
+                self.scene.clearSelection()
+                item.setSelected(True)
+                
+                # Notify inspector
+                self.sceneChanged.emit()
                 
         elif mime_data.hasText():
             # Handle Text Paste
             text = mime_data.text()
             if text:
                 center = self.mapToScene(self.viewport().rect().center())
-                self.add_text_element(text, center.x(), center.y())
+                item = self.add_text_element(text, center.x(), center.y())
+                
+                # Use undo command if available
+                if self.undo_stack and item:
+                    from gui.commands import AddItemCommand
+                    cmd = AddItemCommand(self.scene, item, "Paste Text")
+                    self.undo_stack.push(cmd)
+                
+                # Select the new item
+                if item:
+                    self.scene.clearSelection()
+                    item.setSelected(True)
+                
+                # Notify inspector
+                self.sceneChanged.emit()
             
     def _create_mime_data(self, items):
-        from PyQt6.QtCore import QMimeData
         mime = QMimeData()
         
         # If single image selected, copy as image
@@ -563,19 +703,47 @@ class EditorCanvas(QGraphicsView):
         return mime
 
     def delete_selection(self):
-        for item in self.scene.selectedItems():
-            self.scene.removeItem(item)
+        items = self.scene.selectedItems()
+        if not items:
+            return
+        
+        # Use undo command if available
+        if self.undo_stack:
+            from gui.commands import DeleteItemCommand
+            cmd = DeleteItemCommand(self.scene, items)
+            self.undo_stack.push(cmd)
+        else:
+            for item in items:
+                self.scene.removeItem(item)
+        
+        # Notify inspector
+        self.sceneChanged.emit()
 
     def rotate_selection(self, angle):
+        if not self.scene.selectedItems():
+            return
+
+        # Create a macro command or individual commands
+        # For simplicity, let's do individual commands, but ideally we group them.
+        # QUndoStack.beginMacro() is useful here.
+        
+        if self.undo_stack:
+            self.undo_stack.beginMacro(f"Rotate {angle}°")
+            
+        from gui.commands import RotateItemCommand
+        
         for item in self.scene.selectedItems():
-            # Rotate around center
-            rect = item.boundingRect()
-            center = rect.center()
-            transform = item.transform()
-            transform.translate(center.x(), center.y())
-            transform.rotate(angle)
-            transform.translate(-center.x(), -center.y())
-            item.setTransform(transform)
+            old_rotation = item.rotation()
+            new_rotation = old_rotation + angle
+            
+            if self.undo_stack:
+                cmd = RotateItemCommand(item, old_rotation, new_rotation)
+                self.undo_stack.push(cmd)
+            else:
+                item.setRotation(new_rotation)
+                
+        if self.undo_stack:
+            self.undo_stack.endMacro()
 
     def wheelEvent(self, event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -589,6 +757,7 @@ class EditorCanvas(QGraphicsView):
         """Show context menu on right-click."""
         menu = QMenu(self)
         
+        cut_action = menu.addAction("Cut")
         copy_action = menu.addAction("Copy")
         paste_action = menu.addAction("Paste")
         menu.addSeparator()
@@ -598,12 +767,15 @@ class EditorCanvas(QGraphicsView):
         
         # Enable/disable based on selection
         has_selection = bool(self.scene.selectedItems())
+        cut_action.setEnabled(has_selection)
         copy_action.setEnabled(has_selection)
         delete_action.setEnabled(has_selection)
         
         action = menu.exec(event.globalPos())
         
-        if action == copy_action:
+        if action == cut_action:
+            self.cut_selection()
+        elif action == copy_action:
             self.copy_selection()
         elif action == paste_action:
             self.paste_from_clipboard()

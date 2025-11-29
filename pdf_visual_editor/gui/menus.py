@@ -1,5 +1,4 @@
-from PyQt6.QtWidgets import QMenuBar, QMenu
-from PyQt6.QtGui import QAction
+from qt_compat import QMenuBar, QMenu, QAction
 
 class AppMenu(QMenuBar):
     def __init__(self, parent=None):
@@ -51,6 +50,11 @@ class AppMenu(QMenuBar):
         self.action_zoom_out = QAction("Zoom Out", self)
         view_menu.addAction(self.action_zoom_in)
         view_menu.addAction(self.action_zoom_out)
+        view_menu.addSeparator()
+        self.action_history = QAction("History", self)
+        self.action_history.setCheckable(True)
+        self.action_history.setChecked(False)
+        view_menu.addAction(self.action_history)
         view_menu.addSeparator()
         
         # Theme submenu

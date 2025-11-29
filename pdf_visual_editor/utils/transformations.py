@@ -1,4 +1,4 @@
-from PyQt6.QtGui import QTransform
+from qt_compat import QTransform
 
 class TransformationUtils:
     """

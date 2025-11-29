@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QGraphicsItem
+from qt_compat import QGraphicsItem
 
 class SelectionManager:
     """
