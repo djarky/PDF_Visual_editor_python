@@ -1,0 +1,132 @@
+name: Build PDF Visual Editor
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  # ----------------------
+  # Linux 64 bits
+  # ----------------------
+  build-linux-64:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller PySide2
+
+      - name: Build Linux 64-bit binary
+        run: |
+          chmod +x ./build_exe.sh
+          ./build_exe.sh
+
+      - name: Upload Linux 64-bit artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-64bit
+          path: dist/
+
+  # ----------------------
+  # Linux 32 bits (Docker)
+  # ----------------------
+  build-linux-32:
+    runs-on: ubuntu-latest
+    container:
+      image: i386/ubuntu:20.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller PySide2
+
+      - name: Build Linux 32-bit binary
+        run: |
+          chmod +x ./build_exe.sh
+          pyinstaller --distpath dist-i386 build_exe.spec
+
+      - name: Upload Linux 32-bit artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-32bit
+          path: dist-i386/
+
+  # ----------------------
+  # Windows 64 bits
+  # ----------------------
+  build-windows-64:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller PySide2
+
+      - name: Build Windows 64-bit EXE
+        run: build_exe.bat
+
+      - name: Upload Windows 64-bit artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-64bit
+          path: dist/
+
+  # ----------------------
+  # Windows 32 bits (requiere VM)
+  # ----------------------
+  build-windows-32:
+    runs-on: self-hosted
+    # Nota: Este job debe ejecutarse en una VM Windows 32 bits
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller PySide2
+
+      - name: Build Windows 32-bit EXE
+        run: build_exe.bat
+
+      - name: Upload Windows 32-bit artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-32bit
+          path: dist/
+
