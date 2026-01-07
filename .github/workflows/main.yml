@@ -39,38 +39,46 @@ jobs:
           name: linux-64bit
           path: pdf_visual_editor/dist/
 
-  # ----------------------
-  # Linux 32 bits (Docker)
-  # ----------------------
-  build-linux-32:
-    runs-on: ubuntu-latest
-    container:
-      image: i386/ubuntu:20.04
+# ----------------------
+# Linux 32 bits (Docker)
+# ----------------------
+build-linux-32:
+  runs-on: ubuntu-latest
+  container:
+    image: debian:bullseye  # Usamos la imagen de Debian Bullseye
 
-    steps:
-      - uses: actions/checkout@v4
+  steps:
+    - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+    - name: Install 32-bit Python
+      run: |
+        # Habilitar soporte para arquitectura de 32 bits
+        sudo dpkg --add-architecture i386
+        sudo apt update
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r pdf_visual_editor/requirements.txt
-          pip install pyinstaller PySide2
+        # Instalar las dependencias necesarias para 32 bits
+        sudo apt install -y libc6:i386 libstdc++6:i386 python3.10:i386 python3-pip:i386
 
-      - name: Build Linux 32-bit binary
-        run: |
-          chmod +x pdf_visual_editor/build_exe.sh
-          pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
+        # Asegurarse de usar la versión de Python de 32 bits
+        python3.10 -m pip install --upgrade pip
 
-      - name: Upload Linux 32-bit artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-32bit
-          path: pdf_visual_editor/dist-i386/
+    - name: Install project dependencies
+      run: |
+        # Usar el Python de 32 bits para instalar las dependencias del proyecto
+        python3.10 -m pip install -r pdf_visual_editor/requirements.txt
+        pip install pyinstaller PySide2
+
+    - name: Build Linux 32-bit binary
+      run: |
+        chmod +x pdf_visual_editor/build_exe.sh
+        pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
+
+    - name: Upload Linux 32-bit artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-32bit
+        path: pdf_visual_editor/dist-i386/
+
 
   # ----------------------
   # Windows 64 bits
