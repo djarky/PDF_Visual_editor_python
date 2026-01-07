@@ -30,14 +30,14 @@ jobs:
 
       - name: Build Linux 64-bit binary
         run: |
-          chmod +x ./build_exe.sh
-          ./build_exe.sh
+          chmod +x pdf_visual_editor/build_exe.sh
+          pdf_visual_editor/build_exe.sh
 
       - name: Upload Linux 64-bit artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-64bit
-          path: dist/
+          path: pdf_visual_editor/dist/
 
   # ----------------------
   # Linux 32 bits (Docker)
@@ -63,14 +63,14 @@ jobs:
 
       - name: Build Linux 32-bit binary
         run: |
-          chmod +x ./build_exe.sh
-          pyinstaller --distpath dist-i386 build_exe.spec
+          chmod +x pdf_visual_editor/build_exe.sh
+          pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
 
       - name: Upload Linux 32-bit artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-32bit
-          path: dist-i386/
+          path: pdf_visual_editor/dist-i386/
 
   # ----------------------
   # Windows 64 bits
@@ -93,12 +93,10 @@ jobs:
           pip install pyinstaller PySide2
 
       - name: Build Windows 64-bit EXE
-        run: build_exe.bat
+        run: pdf_visual_editor/build_exe.bat
 
       - name: Upload Windows 64-bit artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-64bit
-          path: dist/
-
- 
+          path: pdf_visual_editor/dist/
