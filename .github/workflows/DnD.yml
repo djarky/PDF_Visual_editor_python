@@ -11,37 +11,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repository
+      # Paso 1: Clonar el repositorio desde GitLab
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Docker-in-Docker (DinD)
-      - name: Set up Docker-in-Docker (DinD)
-        uses: docker/setup-buildx-action@v2
-        with:
-          use-docker-layer-caching: true
-
-      # Step 3: Clone the repository containing the 'build-image.sh' script
+      # Paso 2: Clonar el repositorio de GitLab que contiene el script 'build-image.sh'
       - name: Clone docker-32bit/ubuntu repository
         run: |
           git clone https://gitlab.com/docker-32bit/ubuntu.git
           cd ubuntu
-          # Optionally verify if the 'build-image.sh' file exists
-          ls -l build-image.sh
 
-      # Step 4: Build Ubuntu 32-bit Docker image
-      - name: Build Ubuntu 32-bit Docker image
+      # Paso 3: Modificar el script 'build-image.sh' para añadir 'sudo' a los comandos
+      - name: Modify build-image.sh script
+        run: |
+          # Usar sed para añadir 'sudo' antes de los comandos apt-get
+          sed -i 's/apt-get install/ sudo apt-get install/' ubuntu/build-image.sh
+          # Hacer lo mismo para los comandos chroot que también requieren permisos de root
+          sed -i 's/chroot $chroot_dir apt-get update/ sudo chroot $chroot_dir apt-get update/' ubuntu/build-image.sh
+          sed -i 's/chroot $chroot_dir apt-get -y upgrade/ sudo chroot $chroot_dir apt-get -y upgrade/' ubuntu/build-image.sh
+          sed -i 's/chroot $chroot_dir apt-get -y install/ sudo chroot $chroot_dir apt-get -y install/' ubuntu/build-image.sh
+          # Añadir sudo a cualquier otra línea que pueda requerir permisos elevados
+
+      # Paso 4: Hacer el script ejecutable
+      - name: Make build-image.sh executable
+        run: |
+          chmod +x ubuntu/build-image.sh || exit 1
+
+      # Paso 5: Ejecutar el script modificado
+      - name: Run modified build-image.sh script
         run: |
           cd ubuntu
-          chmod +x build-image.sh || exit 1
           ./build-image.sh || exit 1
 
-      # Step 5: Use the Ubuntu 32-bit image to install dependencies and build the project
+      # Paso 6: Usar la imagen Ubuntu 32-bit para instalar dependencias y construir el proyecto
       - name: Install dependencies and build project
         run: |
-          docker run --rm -v $(pwd):/workspace -w /workspace 32bit/ubuntu:16.04 bash -c "
-            sudo apt update &&
-            sudo apt install -y libc6:i386 libstdc++6:i386 python3.10:i386 python3-pip:i386 &&
+          docker run --rm -v $(pwd):/workspace -w /workspace 32bit/ubuntu:bionic bash -c "
+            sudo apt-get install -y debootstrap schroot apparmor &&
+            sudo apt-get install -y libc6:i386 libstdc++6:i386 python3.10:i386 python3-pip:i386 &&
             python3.10 -m pip install --upgrade pip &&
             python3.10 -m pip install -r pdf_visual_editor/requirements.txt &&
             python3.10 -m pip install pyinstaller PySide2 &&
@@ -49,7 +56,7 @@ jobs:
             pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
           "
 
-      # Step 6: Upload Linux 32-bit artifact
+      # Paso 7: Subir el artefacto de 32-bit
       - name: Upload Linux 32-bit artifact
         uses: actions/upload-artifact@v4
         with:
