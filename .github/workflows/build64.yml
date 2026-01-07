@@ -39,45 +39,7 @@ jobs:
           name: linux-64bit
           path: pdf_visual_editor/dist/
 
-  # ----------------------
-  # Linux 32 bits (Docker)
-  # ----------------------
-  build-linux-32:
-    runs-on: ubuntu-latest
-    container:
-      image: 32bit/debian
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install 32-bit Python and dependencies
-        run: |
-          # Habilitar soporte para arquitectura de 32 bits
-          
-          apt-get update
-
-          # Instalar las dependencias necesarias para 32 bits
-          apt-get install -y libc6 libstdc++6 python3.10 python3-pip
-
-          # Asegurarse de usar la versión de Python de 32 bits
-          python3.10 -m pip install --upgrade pip
-
-      - name: Install project dependencies
-        run: |
-          # Usar el Python de 32 bits para instalar las dependencias del proyecto
-          python3.10 -m pip install -r pdf_visual_editor/requirements.txt
-          python3.10 -m pip install pyinstaller PySide2
-
-      - name: Build Linux 32-bit binary
-        run: |
-          chmod +x pdf_visual_editor/build_exe.sh
-          pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
-
-      - name: Upload Linux 32-bit artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-32bit
-          path: pdf_visual_editor/dist-i386/
 
   # ----------------------
   # Windows 64 bits
