@@ -32,6 +32,8 @@ jobs:
           sed -i 's/chroot $chroot_dir apt-get -y install/ sudo chroot $chroot_dir apt-get -y install/' ubuntu/build-image.sh
           # Añadir sudo a cualquier otra línea que pueda requerir permisos elevados
           sed -i 's/debootstrap/sudo debootstrap/' ubuntu/build-image.sh
+          sed -i 's|cat <<EOF > \$chroot_dir/etc/apt/sources.list|cat <<EOF | sudo tee $chroot_dir/etc/apt/sources.list > /dev/null|' ubuntu/build-image.sh
+
           
       # Paso 4: Hacer el script ejecutable
       - name: Make build-image.sh executable
