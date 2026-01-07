@@ -42,7 +42,7 @@ jobs:
       - name: Run modified build-image.sh script
         run: |
           cd ubuntu
-          ./build-image.sh || exit 1
+          sudo ./build-image.sh || exit 1
 
       # Paso 6: Usar la imagen Ubuntu 32-bit para instalar dependencias y construir el proyecto
       - name: Install dependencies and build project
