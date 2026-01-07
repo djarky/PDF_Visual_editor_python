@@ -45,7 +45,7 @@ jobs:
   build-linux-32:
     runs-on: ubuntu-latest
     container:
-      image: debian:bullseye  # Usamos la imagen de Debian Bullseye
+      image: i386/ubuntu:18.04 
 
     steps:
       - uses: actions/checkout@v4
@@ -53,11 +53,11 @@ jobs:
       - name: Install 32-bit Python and dependencies
         run: |
           # Habilitar soporte para arquitectura de 32 bits
-          dpkg --add-architecture i386
-          apt update
+          
+          apt-get update
 
           # Instalar las dependencias necesarias para 32 bits
-          apt install -y libc6:i386 libstdc++6:i386 python3.10:i386 python3-pip:i386
+          apt-get install -y libc6 libstdc++6 python3.10 python3-pip
 
           # Asegurarse de usar la versión de Python de 32 bits
           python3.10 -m pip install --upgrade pip
