@@ -45,7 +45,7 @@ jobs:
   build-linux-32:
     runs-on: ubuntu-latest
     container:
-      image: 32bit/debian:jessie-armhf 
+      image: 32bit/debian
 
     steps:
       - uses: actions/checkout@v4
