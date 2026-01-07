@@ -25,7 +25,7 @@ jobs:
       - name: Clone docker-32bit/ubuntu repository
         run: |
           git clone https://gitlab.com/docker-32bit/ubuntu.git
-          cd ubuntu
+          #cd ubuntu
 
       # Paso 4: Construir la imagen Ubuntu 32-bit dentro de Docker-in-Docker
       - name: Build Ubuntu 32-bit Docker image
