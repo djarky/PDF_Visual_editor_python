@@ -11,32 +11,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Paso 1: Clonar el repositorio desde GitLab que contiene el script de construcción
+      # Step 1: Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Paso 2: Instalar Docker-in-Docker (DinD)
+      # Step 2: Set up Docker-in-Docker (DinD)
       - name: Set up Docker-in-Docker (DinD)
         uses: docker/setup-buildx-action@v2
         with:
           use-docker-layer-caching: true
 
-      # Paso 3: Clonar el repositorio de GitLab que contiene el script 'build-image.sh'
+      # Step 3: Clone the repository containing the 'build-image.sh' script
       - name: Clone docker-32bit/ubuntu repository
         run: |
           git clone https://gitlab.com/docker-32bit/ubuntu.git
-          #cd ubuntu
+          cd ubuntu
+          # Optionally verify if the 'build-image.sh' file exists
+          ls -l build-image.sh
 
-      # Paso 4: Construir la imagen Ubuntu 32-bit dentro de Docker-in-Docker
+      # Step 4: Build Ubuntu 32-bit Docker image
       - name: Build Ubuntu 32-bit Docker image
         run: |
-          # Hacer el script ejecutable
-          chmod +x build-image.sh
-          
-          # Ejecutar el script para construir la imagen 32bit/ubuntu
-          ./build-image.sh
+          cd ubuntu
+          chmod +x build-image.sh || exit 1
+          ./build-image.sh || exit 1
 
-      # Paso 5: Usar la imagen Ubuntu 32-bit para instalar dependencias y construir el proyecto
+      # Step 5: Use the Ubuntu 32-bit image to install dependencies and build the project
       - name: Install dependencies and build project
         run: |
           docker run --rm -v $(pwd):/workspace -w /workspace 32bit/ubuntu:16.04 bash -c "
@@ -49,7 +49,7 @@ jobs:
             pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
           "
 
-      # Paso 6: Subir el artefacto de 32-bit
+      # Step 6: Upload Linux 32-bit artifact
       - name: Upload Linux 32-bit artifact
         uses: actions/upload-artifact@v4
         with:
