@@ -63,6 +63,7 @@ jobs:
 
       - name: Build Windows 64-bit EXE
         working-directory: pdf_visual_editor
+        shell: cmd
         run: build_exe.bat
 
       - name: Upload Windows 64-bit artifact
