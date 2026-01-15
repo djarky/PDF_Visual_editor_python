@@ -27,14 +27,13 @@ jobs:
           # Usar sed para añadir 'sudo' antes de los comandos apt-get
           sed -i 's/apt-get install/ sudo apt-get install/' ubuntu/build-image.sh
           # Hacer lo mismo para los comandos chroot que también requieren permisos de root
-          sed -i 's/chroot $chroot_dir apt-get update/ sudo chroot $chroot_dir apt-get update/' ubuntu/build-image.sh
-          sed -i 's/chroot $chroot_dir apt-get -y upgrade/ sudo chroot $chroot_dir apt-get -y upgrade/' ubuntu/build-image.sh
-          sed -i 's/chroot $chroot_dir apt-get -y install/ sudo chroot $chroot_dir apt-get -y install/' ubuntu/build-image.sh
+          sed -i 's/chroot \$chroot_dir apt-get update/ sudo chroot \$chroot_dir apt-get update/' ubuntu/build-image.sh
+          sed -i 's/chroot \$chroot_dir apt-get -y upgrade/ sudo chroot \$chroot_dir apt-get -y upgrade/' ubuntu/build-image.sh
+          sed -i 's/chroot \$chroot_dir apt-get -y install/ sudo chroot \$chroot_dir apt-get -y install/' ubuntu/build-image.sh
           # Añadir sudo a cualquier otra línea que pueda requerir permisos elevados
           sed -i 's/debootstrap/sudo debootstrap/' ubuntu/build-image.sh
-          sed -i 's|cat <<EOF > \$chroot_dir/etc/apt/sources.list|cat <<EOF | sudo tee $chroot_dir/etc/apt/sources.list > /dev/null|' ubuntu/build-image.sh
+          sed -i 's@cat <<EOF > \$chroot_dir/etc/apt/sources.list@cat <<EOF | sudo tee \$chroot_dir/etc/apt/sources.list > /dev/null@' ubuntu/build-image.sh
 
-          
       # Paso 4: Hacer el script ejecutable
       - name: Make build-image.sh executable
         run: |
