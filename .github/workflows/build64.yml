@@ -29,16 +29,16 @@ jobs:
           pip install pyinstaller PySide2
 
       - name: Build Linux 64-bit binary
+        working-directory: pdf_visual_editor
         run: |
-          chmod +x pdf_visual_editor/build_exe.sh
-          pdf_visual_editor/build_exe.sh
+          chmod +x build_exe.sh
+          ./build_exe.sh
 
       - name: Upload Linux 64-bit artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-64bit
           path: pdf_visual_editor/dist/
-
 
 
   # ----------------------
@@ -62,7 +62,8 @@ jobs:
           pip install pyinstaller PySide2
 
       - name: Build Windows 64-bit EXE
-        run: pdf_visual_editor/build_exe.bat
+        working-directory: pdf_visual_editor
+        run: build_exe.bat
 
       - name: Upload Windows 64-bit artifact
         uses: actions/upload-artifact@v4
