@@ -3,7 +3,7 @@ About dialog for PDF Visual Editor.
 Displays help, keyboard shortcuts, and developer information.
 """
 from qt_compat import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QLabel, 
-                       QTextEdit, QPushButton, Qt, QPixmap, QFont)
+                       QTextEdit, QPushButton, Qt, QPixmap, QFont, QScrollArea)
 from __version__ import __version__
 import os
 import sys
@@ -101,7 +101,13 @@ class AboutDialog(QDialog):
         widget.setTextFormat(Qt.TextFormat.RichText)
         widget.setOpenExternalLinks(True)
         
-        return widget
+        # Wrap in ScrollArea
+        scroll = QScrollArea()
+        scroll.setWidget(widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        
+        return scroll
     
     def create_help_tab(self):
         """Create the Help & Commands tab."""

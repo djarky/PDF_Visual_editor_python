@@ -2,6 +2,7 @@
 # For modern systems (Python 3.9+): pip install PyQt6
 # For older systems: pip install PySide2
 PyQt6>=6.6.0; python_version >= "3.8"
+PySide6>=6.0.0; python_version >= "3.8"
 PySide2; python_version < "3.8"
 
 # PDF Libraries

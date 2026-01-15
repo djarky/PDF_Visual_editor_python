@@ -66,7 +66,8 @@ try:
         QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
         QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
         QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
-        QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView
+        QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
+        QScrollArea
     )
     from PyQt6.QtCore import (
         Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
@@ -83,38 +84,66 @@ try:
     print(f"[Qt Compat] Using {QT_API}")
 
 except ImportError:
-    # Fall back to PySide2
+    # Fall back to PySide6
     try:
-        from PySide2.QtWidgets import (
+        from PySide6.QtWidgets import (
             QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
             QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
             QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
             QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
             QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
-            QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView
+            QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
+            QScrollArea
         )
-        from PySide2.QtCore import (
+        from PySide6.QtCore import (
             Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
             QMimeData, QModelIndex, Signal
         )
-        from PySide2.QtGui import (
+        from PySide6.QtGui import (
             QPixmap, QImage, QTransform, QPainter, QPen, QColor, QBrush,
-            QMouseEvent, QKeySequence, QDrag, QIcon, QFont
+            QMouseEvent, QKeySequence, QDrag, QIcon, QFont, QUndoCommand,
+            QUndoStack, QAction
         )
-        from PySide2.QtWidgets import QUndoCommand, QUndoStack
-        from PySide2.QtWidgets import QAction
-        from PySide2.QtPrintSupport import QPrinter
-        
-        QT_API = "PySide2"
+        from PySide6.QtPrintSupport import QPrinter
+
+        QT_API = "PySide6"
         print(f"[Qt Compat] Using {QT_API}")
-    
-    except ImportError as e:
-        raise ImportError(
-            "Neither PyQt6 nor PySide2 could be imported. "
-            "Please install one of them:\n"
-            "  pip install PyQt6  (for Python 3.9+)\n"
-            "  pip install PySide2 (for older systems)"
-        ) from e
+
+    except ImportError:
+        # Fall back to PySide2
+        try:
+            from PySide2.QtWidgets import (
+                QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
+                QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
+                QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
+                QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
+                QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
+                QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
+                QScrollArea
+            )
+            from PySide2.QtCore import (
+                Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
+                QMimeData, QModelIndex, Signal
+            )
+            from PySide2.QtGui import (
+                QPixmap, QImage, QTransform, QPainter, QPen, QColor, QBrush,
+                QMouseEvent, QKeySequence, QDrag, QIcon, QFont
+            )
+            from PySide2.QtWidgets import QUndoCommand, QUndoStack
+            from PySide2.QtWidgets import QAction
+            from PySide2.QtPrintSupport import QPrinter
+            
+            QT_API = "PySide2"
+            print(f"[Qt Compat] Using {QT_API}")
+        
+        except ImportError as e:
+            raise ImportError(
+                "Neither PyQt6, PySide6, nor PySide2 could be imported. "
+                "Please install one of them:\n"
+                "  pip install PyQt6\n"
+                "  pip install PySide6\n"
+                "  pip install PySide2"
+            ) from e
 
 # Export all
 __all__ = [
@@ -126,6 +155,7 @@ __all__ = [
     'QStyledItemDelegate', 'QStyleOptionViewItem', 'QGraphicsView', 'QGraphicsScene',
     'QGraphicsPixmapItem', 'QGraphicsRectItem', 'QGraphicsTextItem', 'QGraphicsItem',
     'QMenuBar', 'QListWidget', 'QListWidgetItem', 'QTabWidget', 'QTextEdit', 'QUndoView',
+    'QScrollArea',
     # QtCore
     'Qt', 'QSettings', 'QPointF', 'QRectF', 'QSize', 'QBuffer', 'QIODevice',
     'QMimeData', 'QModelIndex', 'Signal',

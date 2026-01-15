@@ -6,8 +6,11 @@ echo "========================================"
 echo ""
 
 # Check if virtual environment exists
-if [ -d "venv" ]; then
-    echo "Activating virtual environment..."
+if [ -d ".venv" ]; then
+    echo "Activating virtual environment (.venv)..."
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
+    echo "Activating virtual environment (venv)..."
     source venv/bin/activate
 else
     echo "Warning: Virtual environment not found. Using system Python."

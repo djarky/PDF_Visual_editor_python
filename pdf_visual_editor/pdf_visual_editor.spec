@@ -32,6 +32,11 @@ hiddenimports = [
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
     'PyQt6.QtPrintSupport',
+    # PySide6 imports
+    'PySide6.QtCore',
+    'PySide6.QtGui',
+    'PySide6.QtWidgets',
+    'PySide6.QtPrintSupport',
     # PySide2 imports (fallback)
     'PySide2.QtCore',
     'PySide2.QtGui',
@@ -50,6 +55,28 @@ hiddenimports = [
     'zipp',
 ]
 
+# Detect available Qt bindings and configure excludes
+excludes = []
+try:
+    import PyQt6
+    print("Building with PyQt6")
+    excludes.extend(['PySide6', 'PySide2'])
+except ImportError:
+    try:
+        import PySide6
+        print("Building with PySide6")
+        excludes.extend(['PyQt6', 'PySide2'])
+    except ImportError:
+        try:
+            import PySide2
+            print("Building with PySide2")
+            excludes.extend(['PyQt6', 'PySide6'])
+        except ImportError:
+            print("Warning: No Qt bindings found!")
+
+# Filter hiddenimports to remove excluded packages
+hiddenimports = [h for h in hiddenimports if not any(h.startswith(e) for e in excludes)]
+
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -59,7 +86,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

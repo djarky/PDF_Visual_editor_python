@@ -80,8 +80,10 @@ class MainWindow(QMainWindow):
         self.action_capture.triggered.connect(self.toggle_capture_mode)
         
         # Connect Theme Actions
+        # Connect Theme Actions
         self.menu_bar.action_theme_light.triggered.connect(lambda: self.toggle_theme("light"))
         self.menu_bar.action_theme_dark.triggered.connect(lambda: self.toggle_theme("dark"))
+        self.menu_bar.action_theme_system.triggered.connect(lambda: self.toggle_theme("system"))
         
         # Connect Help Actions
         self.menu_bar.action_about.triggered.connect(self.show_about_dialog)
@@ -177,6 +179,15 @@ class MainWindow(QMainWindow):
     
     def apply_theme(self, theme_name: str):
         """Apply a theme by loading its stylesheet."""
+        if theme_name == "system":
+            self.setStyleSheet("")
+            self.current_theme = "system"
+            
+            # Save preference
+            settings = QSettings("Antigravity", "PDFVisualEditor")
+            settings.setValue("theme", "system")
+            return
+
         import os
         theme_file = os.path.join(os.path.dirname(__file__), os.path.pardir, "themes", f"{theme_name}_theme.qss")
         try:

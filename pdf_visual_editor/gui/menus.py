@@ -61,8 +61,10 @@ class AppMenu(QMenuBar):
         theme_menu = view_menu.addMenu("Theme")
         self.action_theme_light = QAction("Light", self)
         self.action_theme_dark = QAction("Dark", self)
+        self.action_theme_system = QAction("System", self)
         theme_menu.addAction(self.action_theme_light)
         theme_menu.addAction(self.action_theme_dark)
+        theme_menu.addAction(self.action_theme_system)
         
         # Help Menu
         help_menu = self.addMenu("Help")
