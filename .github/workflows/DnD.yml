@@ -1,4 +1,4 @@
-name: Build PDF Visual Editor 32bits
+name: Build PDF Visual Editor 32bits (Linux) 
 
 on:
   push:
