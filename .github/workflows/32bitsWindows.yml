@@ -13,27 +13,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Paso 1: Instalar MinGW
-      - name: Install MinGW for i386
-        run: |
-          choco install mingw --version=8.1.0 -y  # Usamos Chocolatey para instalar MinGW
-          setx PATH "%PATH%;C:\tools\mingw64\bin"  # Aseguramos que MinGW esté en el PATH
+      # Instalar Python 32 bits
+      - name: Install Python 32-bit
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          architecture: "x86"
 
-      # Paso 2: Instalar dependencias
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r pdf_visual_editor/requirements.txt
           pip install pyinstaller
 
-      # Paso 3: Compilar para i386 (32 bits)
-      - name: Build i386 binary with PyInstaller
+      - name: Build i386 binary
         run: |
-          pyinstaller --arch i386 pdf_visual_editor.spec
+          pyinstaller pdf_visual_editor.spec
 
-      # Paso 4: Subir el archivo compilado
       - name: Upload i386 artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-i386
-          path: pdf_visual_editor/dist/
+          path: dist/
