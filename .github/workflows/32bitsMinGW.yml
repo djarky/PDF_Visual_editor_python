@@ -1,0 +1,39 @@
+name: Build PDF Visual Editor for i386 (Windows)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-i386:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Paso 1: Instalar MinGW
+      - name: Install MinGW for i386
+        run: |
+          choco install mingw --version=8.1.0 -y  # Usamos Chocolatey para instalar MinGW
+          setx PATH "%PATH%;C:\tools\mingw64\bin"  # Aseguramos que MinGW esté en el PATH
+
+      # Paso 2: Instalar dependencias
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r pdf_visual_editor/requirements.txt
+          pip install pyinstaller
+
+      # Paso 3: Compilar para i386 (32 bits)
+      - name: Build i386 binary with PyInstaller
+        run: |
+          pyinstaller --arch i386 pdf_visual_editor.spec
+
+      # Paso 4: Subir el archivo compilado
+      - name: Upload i386 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-i386
+          path: pdf_visual_editor/dist/
