@@ -33,4 +33,6 @@ COPY . .
 
 RUN chmod +x build_exe.sh
 
+RUN ./build_exe.sh
+
 CMD ["./build_exe.sh"]
