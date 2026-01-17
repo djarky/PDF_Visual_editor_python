@@ -1,0 +1,36 @@
+ARG TARGETARCH
+FROM --platform=linux/${TARGETARCH} python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Dependencias Qt comunes
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libdbus-1-3 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxcb-sync1 \
+    libxcb-util1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && pip install pyinstaller PySide2
+
+COPY . .
+
+RUN chmod +x build_exe.sh
+
+CMD ["./build_exe.sh"]
