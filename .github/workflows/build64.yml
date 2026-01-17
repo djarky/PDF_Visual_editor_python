@@ -26,7 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r pdf_visual_editor/requirements.txt
-          pip install pyinstaller PySide2
+          pip install pyinstaller 
 
       - name: Build Linux 64-bit binary
         working-directory: pdf_visual_editor
@@ -59,7 +59,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r pdf_visual_editor\requirements.txt
-          pip install pyinstaller PySide2
+          pip install pyinstaller 
 
       - name: Build Windows 64-bit EXE
         working-directory: pdf_visual_editor
