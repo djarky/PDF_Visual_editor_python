@@ -1,4 +1,4 @@
-name: Build PDF Visual Editor for i386 (Windows)
+name: Build PDF Visual Editor x86 (Windows)
 
 on:
   push:
@@ -31,8 +31,8 @@ jobs:
         shell: cmd
         run: build_exe.bat
 
-      - name: Upload i386 artifact
+      - name: Upload x86 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-i386
+          name: windows-32bits
           path: dist/
