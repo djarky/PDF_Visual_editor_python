@@ -1,0 +1,45 @@
+name: Build PDF Visual Editor (Linux ARM)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-arm:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            platform: linux/arm64
+            artifact: linux-arm64
+          - arch: arm
+            platform: linux/arm/v7
+            artifact: linux-armv7
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.artifact }} binary
+        run: |
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            -f pdf_visual_editor/Dockerfile.arm \
+            --build-arg TARGETARCH=${{ matrix.arch }} \
+            --output type=local,dest=output-${{ matrix.arch }} \
+            pdf_visual_editor
+
+      - name: Upload ${{ matrix.artifact }} artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: output-${{ matrix.arch }}/dist/
