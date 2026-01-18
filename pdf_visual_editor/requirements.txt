@@ -14,7 +14,8 @@ PySide2; (platform_machine == "armv7l" or (python_version < "3.8" and "86" not i
 #PyMuPDF>=1.23.0
 PyMuPDF
 pdfminer.six>=20221105
-pikepdf>=8.0.0
+#pikepdf>=8.0.0
+pikepdf
 Pillow>=10.0.0
 
 # Backports for older Python versions
