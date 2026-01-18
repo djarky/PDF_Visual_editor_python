@@ -1,0 +1,34 @@
+name: Build PDF Visual Editor (Linux i386 Alternative)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-i386-alt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build linux-i386 with Docker
+        run: |
+          docker buildx build \
+            --platform linux/386 \
+            -f pdf_visual_editor/Dockerfile.i386 \
+            --output type=local,dest=output-i386 \
+            pdf_visual_editor
+
+      - name: Upload linux-i386 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-i386-alt
+          path: output-i386/dist/
