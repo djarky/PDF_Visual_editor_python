@@ -42,6 +42,11 @@ hiddenimports = [
     'PySide2.QtGui',
     'PySide2.QtWidgets',
     'PySide2.QtPrintSupport',
+    # PyQt5 imports
+    'PyQt5.QtCore',
+    'PyQt5.QtGui',
+    'PyQt5.QtWidgets',
+    'PyQt5.QtPrintSupport',
     # PDF libraries
     'fitz',  # PyMuPDF
     'pikepdf',
@@ -70,9 +75,14 @@ except ImportError:
         try:
             import PySide2
             print("Building with PySide2")
-            excludes.extend(['PyQt6', 'PySide6'])
+            excludes.extend(['PyQt6', 'PySide6', 'PyQt5'])
         except ImportError:
-            print("Warning: No Qt bindings found!")
+            try:
+                import PyQt5
+                print("Building with PyQt5")
+                excludes.extend(['PyQt6', 'PySide6', 'PySide2'])
+            except ImportError:
+                print("Warning: No Qt bindings found!")
 
 # Filter hiddenimports to remove excluded packages
 hiddenimports = [h for h in hiddenimports if not any(h.startswith(e) for e in excludes)]
