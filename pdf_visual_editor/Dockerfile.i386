@@ -23,16 +23,19 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements.common.txt .
+COPY requirements.i386.txt .
 
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt \
-    && pip install pyinstaller pyside2
+    && pip install -r requirements.i386.txt \
+    && pip install pyinstaller
 
 COPY . .
 
-RUN chmod +x build_exe.sh
+RUN chmod +x build_i386.sh
 
-RUN ./build_exe.sh
+RUN ./build_i386.sh
+
+CMD ["./build_i386.sh"]
 
 

@@ -1,0 +1,4 @@
+pdfminer.six>=20221105
+pikepdf
+Pillow
+importlib-metadata; python_version < "3.8"
