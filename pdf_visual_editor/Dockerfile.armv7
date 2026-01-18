@@ -1,0 +1,48 @@
+FROM --platform=linux/arm/v7 python:3.10-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies for PyMuPDF and common Qt dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3-dev \
+    swig \
+    libfreetype6-dev \
+    libharfbuzz-dev \
+    libjbig2dec0-dev \
+    libopenjp2-7-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    libgl1 \
+    libdbus-1-3 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxcb-sync1 \
+    libxcb-util1 \
+    binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+# Upgrade pip and install requirements (will compile PyMuPDF)
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && pip install pyinstaller
+
+COPY . .
+
+RUN chmod +x build_exe.sh
+
+RUN ./build_exe.sh
+
+CMD ["./build_exe.sh"]
