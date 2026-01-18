@@ -31,7 +31,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64
-          path: output-arm64/dist/
+          path: output-arm64/app/dist/
 
   build-armv7:
     runs-on: ubuntu-latest
@@ -57,4 +57,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-armv7
-          path: output-armv7/dist/
+          path: output-armv7/app/dist/

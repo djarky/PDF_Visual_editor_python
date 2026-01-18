@@ -31,4 +31,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-i386-alt
-          path: output-i386/dist/
+          path: output-i386/app/dist/
