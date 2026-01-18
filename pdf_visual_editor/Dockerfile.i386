@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     libxcb-util1 \
     binutils \
     python3-pyqt5 \
+			pyside2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
