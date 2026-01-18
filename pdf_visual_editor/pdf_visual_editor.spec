@@ -19,10 +19,18 @@ datas = [
     ('resources/shortcuts.html', 'resources'),
 ]
 
+# Helper to safely copy metadata only if available
+def try_copy_metadata(package):
+    try:
+        return copy_metadata(package)
+    except Exception as e:
+        print(f"Warning: Could not copy metadata for {package}: {e}")
+        return []
+
 # Include metadata for pikepdf (required for version check)
-datas += copy_metadata('pikepdf')
+datas += try_copy_metadata('pikepdf')
 # Also include metadata for pdfminer.six just in case
-datas += copy_metadata('pdfminer.six')
+datas += try_copy_metadata('pdfminer.six')
 
 # Hidden imports for Qt frameworks and other modules that PyInstaller might miss
 # Includes both PyQt6 and PySide2 to support either framework
