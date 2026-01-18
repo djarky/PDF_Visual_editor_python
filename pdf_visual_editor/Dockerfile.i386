@@ -26,14 +26,14 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt \
-    && pip install pyinstaller
+RUN linux32 pip install --upgrade pip \
+    && linux32 pip install -r requirements.txt \
+    && linux32 pip install pyinstaller
 
 COPY . .
 
 RUN chmod +x build_exe.sh
 
-RUN ./build_exe.sh
+RUN linux32 ./build_exe.sh
 
 CMD ["./build_exe.sh"]
