@@ -54,7 +54,7 @@ jobs:
             python3 -m pip install --upgrade pip &&
             python3 -m pip install -r pdf_visual_editor/requirements.txt &&
             chmod +x pdf_visual_editor/build_exe.sh &&
-            pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/build_exe.spec
+            pyinstaller --distpath pdf_visual_editor/dist-i386 pdf_visual_editor/pdf_visual_editor.spec
           "
 
       # Paso 7: Subir el artefacto de 32-bit
