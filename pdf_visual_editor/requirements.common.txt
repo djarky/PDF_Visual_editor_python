@@ -1,4 +1,5 @@
-pdfminer.six>=20221105
+pdfminer.six>=20221105; python_version >= "3.8"
+pdfminer.six<20220319; python_version < "3.8"
 pikepdf
 Pillow
 importlib-metadata; python_version < "3.8"
