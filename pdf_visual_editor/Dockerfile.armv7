@@ -39,7 +39,7 @@ COPY requirements.txt .
 # Upgrade pip and install requirements (will compile PyMuPDF)
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt --extra-index-url https://www.piwheels.org/simple \
-    && pip install pyinstaller pyside6
+    && pip install pyinstaller pyside2
 
 COPY . .
 
