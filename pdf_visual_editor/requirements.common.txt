@@ -2,3 +2,5 @@ pdfminer.six>=20221105
 pikepdf
 Pillow
 importlib-metadata; python_version < "3.8"
+# Pin cryptography to avoid Rust build on legacy systems (Py3.6)
+cryptography<3.4; python_version < "3.8"
