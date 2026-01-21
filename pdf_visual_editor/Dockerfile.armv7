@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y \
     libxcb-sync1 \
     libxcb-util1 \
     binutils \
+    libqpdf-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
