@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
     binutils \
     libqpdf-dev \
     pkg-config \ 
-    python3-pyside5 \
+    python3-pyside2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
