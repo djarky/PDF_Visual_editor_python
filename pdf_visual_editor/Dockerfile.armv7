@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
     libxcb-util1 \
     binutils \
     libqpdf-dev \
-    pkg-config \
+    pkg-config \ 
+    python3-pyside6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -39,7 +40,7 @@ COPY requirements.txt .
 # Upgrade pip and install requirements (will compile PyMuPDF)
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt --extra-index-url https://www.piwheels.org/simple \
-    && pip install pyinstaller pyqt5
+    && pip install pyinstaller
 
 COPY . .
 
