@@ -36,6 +36,9 @@ class QObject:
     def blockSignals(self, b): pass
     def signalsBlocked(self): return False
     def isVisible(self): return False
+    def show(self): pass
+    def hide(self): pass
+    def setVisible(self, v): pass
     def _handle_event(self, event): pass
     def _draw_recursive(self, pos=pygame.Vector2(0,0)): pass
 
@@ -182,24 +185,37 @@ class QApplication:
 
 class QWidget(QObject):
     def __init__(self, parent=None):
-        super().__init__(parent); self._rect, self._visible, self._layout, self._stylesheet = pygame.Rect(0, 0, 100, 100), True, None, ""
+        super().__init__(parent); self._rect, self._visible, self._layout, self._stylesheet = pygame.Rect(0, 0, 100, 100), False, None, ""
         self._parent, self._children = parent, []
-        (parent._children.append(self) if parent and hasattr(parent, '_children') else None)
+        if parent and hasattr(parent, '_children'): parent._children.append(self)
+        elif not parent and QApplication._instance: QApplication._instance._windows.append(self)
         self.clicked = Signal()
-    def setWindowTitle(self, title): pygame.display.set_caption(title)
+    def setWindowTitle(self, title):
+        if isinstance(self, QMainWindow): pygame.display.set_caption(title)
     def resize(self, w, h): self._rect.width, self._rect.height = w, h
     def setCentralWidget(self, widget): widget._parent = self
     def setStyleSheet(self, ss): self._stylesheet = ss
-    def show(self): self._visible = True
-    def hide(self): self._visible = False
-    def setVisible(self, v): self._visible = v
+    def show(self):
+        self._visible = True
+        for child in self._children:
+            if hasattr(child, 'show') and not isinstance(child, QMenu): child.show()
+    def hide(self):
+        self._visible = False
+        for child in self._children:
+            if hasattr(child, 'hide'): child.hide()
+    def setVisible(self, v): (self.show() if v else self.hide())
     def isVisible(self): return self._visible
     def close(self): self.hide()
-    def setLayout(self, layout): self._layout = layout
+    def setLayout(self, layout): self._layout = layout; layout._parent = self
+    def _set_parent(self, parent):
+        if self._parent and self in self._parent._children: self._parent._children.remove(self)
+        self._parent = parent
+        if parent and hasattr(parent, '_children'): parent._children.append(self)
     def _handle_event(self, event): [child._handle_event(event) for child in self._children if child.isVisible()]
     def _draw_recursive(self, offset=pygame.Vector2(0,0)):
         if not self.isVisible(): return
-        if self._layout and hasattr(self._layout, 'arrange'): self._layout.arrange(self._rect)
+        if self._layout and hasattr(self._layout, 'arrange'):
+            self._layout.arrange(self._rect)
         elif self.__class__.__name__ == 'QMainWindow' and hasattr(self, '_central_widget') and self._central_widget:
             self._central_widget._rect = pygame.Rect(0, 0, self._rect.width, self._rect.height)
         
@@ -209,8 +225,19 @@ class QWidget(QObject):
         # Draw a subtle border for all widgets to show boundaries in fallback mode
         screen = QApplication._instance._windows[0]._screen
         if screen and self.__class__ != QMainWindow:
-            pygame.draw.rect(screen, (220, 220, 220), (pos.x, pos.y, self._rect.width, self._rect.height))
-            pygame.draw.rect(screen, (180, 180, 180), (pos.x, pos.y, self._rect.width, self._rect.height), 1)
+            # Different colors based on widget type
+            color = (200, 200, 205)
+            if "Thumbnail" in self.__class__.__name__: color = (180, 180, 190)
+            elif "Inspector" in self.__class__.__name__: color = (210, 210, 220)
+            elif "Canvas" in self.__class__.__name__: color = (255, 255, 255)
+            
+            pygame.draw.rect(screen, color, (pos.x, pos.y, self._rect.width, self._rect.height))
+            pygame.draw.rect(screen, (150, 150, 150), (pos.x, pos.y, self._rect.width, self._rect.height), 1)
+            
+            # Label the widget container
+            font = pygame.font.SysFont(None, 16)
+            txt = font.render(self.__class__.__name__, True, (100, 100, 100))
+            screen.blit(txt, (pos.x + 2, pos.y + 2))
     def statusBar(self):
         class MockStatusBar:
             def addWidget(self, w): pass
@@ -226,6 +253,8 @@ class QMainWindow(QWidget):
     def setMenuBar(self, menu_bar): pass
     def setCentralWidget(self, widget):
         self._central_widget = widget
+        widget._set_parent(self)
+        widget.show()
         widget._rect = pygame.Rect(0, 0, self._rect.width, self._rect.height)
     def show(self):
         super().show()
@@ -238,10 +267,12 @@ class QDialog(QWidget):
 
 class QVBoxLayout:
     def __init__(self, parent=None):
-        self.items = []
+        self.items = []; self._parent = parent
         if parent and hasattr(parent, 'setLayout'): parent.setLayout(self)
-    def addWidget(self, w, alignment=0): self.items.append(w)
-    def addLayout(self, l): self.items.append(l)
+    def addWidget(self, w, alignment=0):
+        self.items.append(w)
+        if self._parent and hasattr(w, '_set_parent'): w._set_parent(self._parent)
+    def addLayout(self, l): self.items.append(l); l._parent = self._parent
     def addStretch(self, s=0): pass
     def setContentsMargins(self, *args): pass
     def setSpacing(self, s): pass
@@ -252,12 +283,15 @@ class QVBoxLayout:
             r = pygame.Rect(0, i*h, rect.width, h)
             if hasattr(item, '_rect'): item._rect = r
             if hasattr(item, '_layout') and item._layout: item._layout.arrange(r)
+            elif hasattr(item, 'arrange'): item.arrange(r)
 class QHBoxLayout:
     def __init__(self, parent=None):
-        self.items = []
+        self.items = []; self._parent = parent
         if parent and hasattr(parent, 'setLayout'): parent.setLayout(self)
-    def addWidget(self, w, alignment=0): self.items.append(w)
-    def addLayout(self, l): self.items.append(l)
+    def addWidget(self, w, alignment=0):
+        self.items.append(w)
+        if self._parent and hasattr(w, '_set_parent'): w._set_parent(self._parent)
+    def addLayout(self, l): self.items.append(l); l._parent = self._parent
     def addStretch(self, s=0): pass
     def setContentsMargins(self, *args): pass
     def setSpacing(self, s): pass
@@ -268,10 +302,26 @@ class QHBoxLayout:
             r = pygame.Rect(i*w, 0, w, rect.height)
             if hasattr(item, '_rect'): item._rect = r
             if hasattr(item, '_layout') and item._layout: item._layout.arrange(r)
+            elif hasattr(item, 'arrange'): item.arrange(r)
 class QSplitter(QWidget):
-    def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None): super().__init__(parent)
-    def addWidget(self, w): pass
+    def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
+        super().__init__(parent); self._items = []; self._orientation = orientation
+    def addWidget(self, w): 
+        self._items.append(w); w._set_parent(self); w.show()
     def setSizes(self, sizes): pass
+    def _draw_recursive(self, offset=pygame.Vector2(0,0)):
+        if not self.isVisible(): return
+        if self._items:
+            n = len(self._items)
+            if self._orientation == Qt.Orientation.Horizontal:
+                w = self._rect.width / n
+                for i, item in enumerate(self._items):
+                    item._rect = pygame.Rect(i*w, 0, w, self._rect.height)
+            else:
+                h = self._rect.height / n
+                for i, item in enumerate(self._items):
+                    item._rect = pygame.Rect(0, i*h, self._rect.width, h)
+        super()._draw_recursive(offset)
 class QFileDialog:
     @staticmethod
     def getOpenFileName(*args): return ("", "")
