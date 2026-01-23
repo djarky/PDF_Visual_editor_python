@@ -188,6 +188,7 @@ class QMainWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent); self._screen = None
         (QApplication._instance._windows.append(self) if QApplication._instance else None)
+    def setMenuBar(self, menu_bar): pass
     def show(self):
         super().show()
         if not self._screen: self._screen = pygame.display.set_mode((self._rect.width, self._rect.height), pygame.RESIZABLE)
@@ -375,11 +376,21 @@ class QSettings(QObject):
     def __init__(self, *args): super().__init__()
     def value(self, key, default=None, type=None): return default
     def setValue(self, key, val): pass
-class QMenuBar(QWidget): pass
+class QMenuBar(QWidget):
+    def addMenu(self, title):
+        m = QMenu(title, self)
+        return m
 class QMenu(QWidget):
-    def __init__(self, *args): super().__init__(); self.menu_edit = self # compatibility
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+        self.title = title
+        self.menu_edit = self
     def addAction(self, text):
         return QAction(text)
+    def addMenu(self, arg):
+        if isinstance(arg, str):
+            return QMenu(arg, self)
+        return arg
     def addSeparator(self):
         pass
     def exec(self, pos=None):
@@ -392,6 +403,10 @@ class QAction(QObject):
     def setEnabled(self, e):
         pass
     def setVisible(self, v):
+        pass
+    def setCheckable(self, b):
+        pass
+    def setChecked(self, b):
         pass
 class QSlider(QWidget):
     valueChanged = Signal(int)
@@ -416,10 +431,17 @@ class QStyledItemDelegate: pass
 class QStyleOptionViewItem: pass
 class QListWidget: pass
 class QListWidgetItem: pass
-class QTabWidget: pass
-class QTextEdit: pass
-class QUndoView: pass
-class QScrollArea: pass
+class QTabWidget(QWidget):
+    def addTab(self, w, label): pass
+class QTextEdit(QWidget):
+    def setHtml(self, html): pass
+    def setReadOnly(self, b): pass
+class QUndoView(QWidget): pass
+class QScrollArea(QWidget):
+    class Shape: NoFrame = 0
+    def setWidget(self, w): pass
+    def setWidgetResizable(self, b): pass
+    def setFrameShape(self, s): pass
 class QBuffer:
     def __init__(self):
         pass
@@ -445,6 +467,11 @@ class QKeySequence:
     @staticmethod
     def matches(k1, k2): return False
     def __init__(self, *args): pass
+class QDrag:
+    def __init__(self, *args):
+        pass
+    def exec(self, *args):
+        pass
 def pyqtSignal(*args): return Signal(*args)
 
 __all__ = [
@@ -458,5 +485,5 @@ __all__ = [
     'QStyleOptionViewItem', 'QListWidget', 'QListWidgetItem', 'QTabWidget',
     'QTextEdit', 'QUndoView', 'QScrollArea', 'QBuffer', 'QIODevice', 'QMimeData',
     'QModelIndex', 'QPrinter', 'QKeySequence', 'QPointF', 'QRectF', 'QSize',
-    'QPixmap', 'QImage', 'QFont', 'QMouseEvent', 'QIcon'
+    'QPixmap', 'QImage', 'QFont', 'QMouseEvent', 'QIcon', 'QDrag'
 ]

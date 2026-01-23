@@ -165,18 +165,32 @@ except ImportError:
             except ImportError as e:
                 # Final fall back to our custom GameQt (Pygame-based)
                 try:
-                    from .gameqt import (
-                        QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
-                        QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
-                        QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
-                        QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
-                        QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
-                        QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
-                        QScrollArea, Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
-                        QMimeData, QModelIndex, Signal, QPixmap, QImage, QTransform, QPainter,
-                        QPen, QColor, QBrush, QMouseEvent, QKeySequence, QDrag, QIcon, QFont,
-                        QUndoCommand, QUndoStack, QAction, QPrinter
-                    )
+                    try:
+                        from .gameqt import (
+                            QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
+                            QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
+                            QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
+                            QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
+                            QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
+                            QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
+                            QScrollArea, Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
+                            QMimeData, QModelIndex, Signal, QPixmap, QImage, QTransform, QPainter,
+                            QPen, QColor, QBrush, QMouseEvent, QKeySequence, QDrag, QIcon, QFont,
+                            QUndoCommand, QUndoStack, QAction, QPrinter
+                        )
+                    except (ImportError, ValueError):
+                        from gameqt import (
+                            QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
+                            QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
+                            QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
+                            QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
+                            QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
+                            QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
+                            QScrollArea, Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
+                            QMimeData, QModelIndex, Signal, QPixmap, QImage, QTransform, QPainter,
+                            QPen, QColor, QBrush, QMouseEvent, QKeySequence, QDrag, QIcon, QFont,
+                            QUndoCommand, QUndoStack, QAction, QPrinter
+                        )
                     QT_API = "GameQt"
                     print(f"[Qt Compat] Using {QT_API} (Pygame Fallback)")
                 except ImportError:
