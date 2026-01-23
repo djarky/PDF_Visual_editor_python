@@ -39,7 +39,7 @@ class QObject:
     def show(self): pass
     def hide(self): pass
     def setVisible(self, v): pass
-    def _handle_event(self, event): pass
+    def _handle_event(self, event, offset): pass
     def _draw_recursive(self, pos=pygame.Vector2(0,0)): pass
 
 class QPointF:
@@ -164,7 +164,8 @@ class QApplication:
                 if event.type == pygame.QUIT:
                     print("[GameQt] QUIT event received")
                     running = False
-                for win in self._windows: win._handle_event(event)
+                for win in self._windows:
+                    if win.isVisible(): win._handle_event(event, pygame.Vector2(0,0))
 
             if not self._windows:
                 print("[GameQt] No windows registered, exiting")
@@ -209,9 +210,22 @@ class QWidget(QObject):
     def setLayout(self, layout): self._layout = layout; layout._parent = self
     def _set_parent(self, parent):
         if self._parent and self in self._parent._children: self._parent._children.remove(self)
+        if not parent and QApplication._instance and self not in QApplication._instance._windows: 
+            QApplication._instance._windows.append(self)
+        elif parent and QApplication._instance and self in QApplication._instance._windows:
+            QApplication._instance._windows.remove(self)
         self._parent = parent
         if parent and hasattr(parent, '_children'): parent._children.append(self)
-    def _handle_event(self, event): [child._handle_event(event) for child in self._children if child.isVisible()]
+    def _handle_event(self, event, offset):
+        if not self.isVisible(): return
+        my_pos = offset + pygame.Vector2(self._rect.topleft)
+        # Propagate to children first (top-most priority)
+        [child._handle_event(event, my_pos) for child in reversed(self._children)]
+        
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_rect = pygame.Rect(my_pos.x, my_pos.y, self._rect.width, self._rect.height)
+            if mouse_rect.collidepoint(event.pos):
+                self.clicked.emit()
     def _draw_recursive(self, offset=pygame.Vector2(0,0)):
         if not self.isVisible(): return
         if self._layout and hasattr(self._layout, 'arrange'):
@@ -224,20 +238,25 @@ class QWidget(QObject):
     def _draw(self, pos):
         # Draw a subtle border for all widgets to show boundaries in fallback mode
         screen = QApplication._instance._windows[0]._screen
-        if screen and self.__class__ != QMainWindow:
+        if screen and self.__class__.__name__ != 'QMainWindow':
             # Different colors based on widget type
-            color = (200, 200, 205)
-            if "Thumbnail" in self.__class__.__name__: color = (180, 180, 190)
-            elif "Inspector" in self.__class__.__name__: color = (210, 210, 220)
-            elif "Canvas" in self.__class__.__name__: color = (255, 255, 255)
+            color = (220, 220, 225)
+            class_name = self.__class__.__name__
+            if "Thumbnail" in class_name: color = (190, 190, 200)
+            elif "Inspector" in class_name: color = (200, 200, 210)
+            elif "Canvas" in class_name: color = (255, 255, 255)
+            elif "Splitter" in class_name: color = (230, 230, 230)
             
+            # Fill
             pygame.draw.rect(screen, color, (pos.x, pos.y, self._rect.width, self._rect.height))
-            pygame.draw.rect(screen, (150, 150, 150), (pos.x, pos.y, self._rect.width, self._rect.height), 1)
+            # Border
+            pygame.draw.rect(screen, (120, 120, 130), (pos.x, pos.y, self._rect.width, self._rect.height), 1)
             
-            # Label the widget container
-            font = pygame.font.SysFont(None, 16)
-            txt = font.render(self.__class__.__name__, True, (100, 100, 100))
-            screen.blit(txt, (pos.x + 2, pos.y + 2))
+            # Label the widget container if it's large enough
+            if self._rect.width > 50 and self._rect.height > 20:
+                font = pygame.font.SysFont(None, 18)
+                txt = font.render(class_name, True, (80, 80, 90))
+                screen.blit(txt, (pos.x + 4, pos.y + 4))
     def statusBar(self):
         class MockStatusBar:
             def addWidget(self, w): pass
@@ -352,9 +371,13 @@ class QPushButton(QWidget):
     def _draw(self, pos):
         screen = QApplication._instance._windows[0]._screen
         if screen:
-            pygame.draw.rect(screen, (100, 150, 240), (pos.x, pos.y, self._rect.width, self._rect.height), border_radius=4)
+            # Button states (simplified)
+            color = (100, 150, 240)
+            if pygame.Rect(pos.x, pos.y, self._rect.width, self._rect.height).collidepoint(pygame.mouse.get_pos()):
+                color = (120, 170, 255)
+            pygame.draw.rect(screen, color, (pos.x, pos.y, self._rect.width, self._rect.height), border_radius=4)
             pygame.draw.rect(screen, (50, 80, 180), (pos.x, pos.y, self._rect.width, self._rect.height), 1, border_radius=4)
-            font = pygame.font.SysFont(None, 20)
+            font = pygame.font.SysFont(None, 18)
             txt = font.render(self._text, True, (255, 255, 255))
             tw, th = txt.get_size()
             screen.blit(txt, (pos.x + (self._rect.width - tw)//2, pos.y + (self._rect.height - th)//2))
@@ -479,9 +502,14 @@ class QGraphicsView(QWidget):
         if self._scene and screen:
             pygame.draw.rect(screen, (255, 255, 255), (pos.x, pos.y, self._rect.width, self._rect.height))
             [item.paint(screen, pos) for item in self._scene.items() if item.isVisible()]
-    def _handle_event(self, event):
+    def _handle_event(self, event, offset):
+        my_pos = offset + pygame.Vector2(self._rect.topleft)
         if event.type == pygame.MOUSEBUTTONDOWN and self._scene:
-            q_event = QMouseEvent(event.pos, event.button, pygame.key.get_mods()); self._scene.mousePressEvent(q_event)
+            # Transform mouse pos to local view coordinates
+            local_pos = pygame.Vector2(event.pos) - my_pos
+            q_event = QMouseEvent(local_pos, event.button, pygame.key.get_mods())
+            self._scene.mousePressEvent(q_event)
+        super()._handle_event(event, offset)
 
 class QPainter:
     class RenderHint: Antialiasing = 1; SmoothPixmapTransform = 2
