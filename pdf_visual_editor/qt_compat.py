@@ -163,14 +163,32 @@ except ImportError:
                 print(f"[Qt Compat] Using {QT_API}")
 
             except ImportError as e:
-                raise ImportError(
-                    "Neither PyQt6, PySide6, PyQt5, nor PySide2 could be imported. "
-                    "Please install one of them:\n"
-                    "  pip install PyQt6\n"
-                    "  pip install PySide6\n"
-                    "  pip install PyQt5\n"
-                    "  pip install PySide2"
-                ) from e
+                # Final fall back to our custom GameQt (Pygame-based)
+                try:
+                    from .gameqt import (
+                        QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
+                        QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
+                        QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
+                        QStyledItemDelegate, QStyleOptionViewItem, QGraphicsView, QGraphicsScene,
+                        QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem,
+                        QMenuBar, QListWidget, QListWidgetItem, QTabWidget, QTextEdit, QUndoView,
+                        QScrollArea, Qt, QSettings, QPointF, QRectF, QSize, QBuffer, QIODevice,
+                        QMimeData, QModelIndex, Signal, QPixmap, QImage, QTransform, QPainter,
+                        QPen, QColor, QBrush, QMouseEvent, QKeySequence, QDrag, QIcon, QFont,
+                        QUndoCommand, QUndoStack, QAction, QPrinter
+                    )
+                    QT_API = "GameQt"
+                    print(f"[Qt Compat] Using {QT_API} (Pygame Fallback)")
+                except ImportError:
+                    raise ImportError(
+                        "Neither PyQt6, PySide6, PyQt5, PySide2, nor GameQt could be imported. "
+                        "Please install one of them:\n"
+                        "  pip install PyQt6\n"
+                        "  pip install PySide6\n"
+                        "  pip install PyQt5\n"
+                        "  pip install PySide2\n"
+                        "  pip install pygame (for GameQt fallback)"
+                    ) from e
 
 # Export all
 __all__ = [

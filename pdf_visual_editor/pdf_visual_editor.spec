@@ -66,6 +66,8 @@ hiddenimports = [
     # Backports for Python < 3.8
     'importlib_metadata',
     'zipp',
+    # Pygame for GameQt fallback
+    'pygame',
 ]
 
 # Detect available Qt bindings and configure excludes

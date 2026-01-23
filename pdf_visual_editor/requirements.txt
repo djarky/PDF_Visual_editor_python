@@ -22,3 +22,6 @@ Pillow
 # Backports for older Python versions
 #importlib-metadata>=6.0.0; python_version < "3.8"
 importlib-metadata; python_version < "3.8"
+
+# Pygame for GameQt fallback
+pygame>=2.5.0
