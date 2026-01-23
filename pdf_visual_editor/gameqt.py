@@ -157,30 +157,20 @@ class QApplication:
         return MockClipboard()
     def exec(self):
         clock = pygame.time.Clock(); running = True
-        print(f"[GameQt] Starting event loop with {len(self._windows)} windows...")
         while running:
             events = pygame.event.get()
             for event in events:
-                if event.type == pygame.QUIT:
-                    print("[GameQt] QUIT event received")
-                    running = False
+                if event.type == pygame.QUIT: running = False
                 for win in self._windows:
                     if win.isVisible(): win._handle_event(event, pygame.Vector2(0,0))
 
-            if not self._windows:
-                print("[GameQt] No windows registered, exiting")
-                break
-                
+            if not self._windows: break
             has_visible = False
             for win in self._windows:
                 if win.isVisible():
                     has_visible = True
                     win._draw_recursive(pygame.Vector2(0,0))
-            
-            if not has_visible and clock.get_time() > 2000:
-                 print("[GameQt] No visible windows for 2s, exiting")
-                 break
-
+            if not has_visible and clock.get_time() > 5000: break
             pygame.display.flip(); clock.tick(60)
         pygame.quit(); return 0
 
@@ -189,12 +179,13 @@ class QWidget(QObject):
         super().__init__(parent); self._rect, self._visible, self._layout, self._stylesheet = pygame.Rect(0, 0, 100, 100), False, None, ""
         self._parent, self._children = parent, []
         if parent and hasattr(parent, '_children'): parent._children.append(self)
-        elif not parent and QApplication._instance: QApplication._instance._windows.append(self)
         self.clicked = Signal()
     def setWindowTitle(self, title):
         if isinstance(self, QMainWindow): pygame.display.set_caption(title)
     def resize(self, w, h): self._rect.width, self._rect.height = w, h
-    def setCentralWidget(self, widget): widget._parent = self
+    def setCentralWidget(self, widget):
+        widget._set_parent(self); widget.show()
+        widget._rect = pygame.Rect(0, 0, self._rect.width, self._rect.height)
     def setStyleSheet(self, ss): self._stylesheet = ss
     def show(self):
         self._visible = True
@@ -219,47 +210,39 @@ class QWidget(QObject):
     def _handle_event(self, event, offset):
         if not self.isVisible(): return
         my_pos = offset + pygame.Vector2(self._rect.topleft)
-        # Propagate to children first (top-most priority)
-        [child._handle_event(event, my_pos) for child in reversed(self._children)]
-        
+        for child in reversed(self._children): child._handle_event(event, my_pos)
         if event.type == pygame.MOUSEBUTTONDOWN:
             mouse_rect = pygame.Rect(my_pos.x, my_pos.y, self._rect.width, self._rect.height)
             if mouse_rect.collidepoint(event.pos):
+                local_pos = pygame.Vector2(event.pos) - my_pos
+                q_event = QMouseEvent(local_pos, event.button, pygame.key.get_mods())
+                if hasattr(self, 'mousePressEvent'): self.mousePressEvent(q_event)
                 self.clicked.emit()
     def _draw_recursive(self, offset=pygame.Vector2(0,0)):
         if not self.isVisible(): return
-        if self._layout and hasattr(self._layout, 'arrange'):
-            self._layout.arrange(self._rect)
-        elif self.__class__.__name__ == 'QMainWindow' and hasattr(self, '_central_widget') and self._central_widget:
-            self._central_widget._rect = pygame.Rect(0, 0, self._rect.width, self._rect.height)
-        
-        pos = offset + pygame.Vector2(self._rect.topleft)
-        self._draw(pos); [child._draw_recursive(pos) for child in self._children]
+        # Handle layout before calculating my_pos for children
+        if self._layout and hasattr(self._layout, 'arrange'): self._layout.arrange(self._rect)
+        my_pos = offset + pygame.Vector2(self._rect.topleft)
+        self._draw(my_pos)
+        for child in self._children: child._draw_recursive(my_pos)
     def _draw(self, pos):
-        # Draw a subtle border for all widgets to show boundaries in fallback mode
         screen = QApplication._instance._windows[0]._screen
         if screen and self.__class__.__name__ != 'QMainWindow':
-            # Different colors based on widget type
             color = (220, 220, 225)
             class_name = self.__class__.__name__
             if "Thumbnail" in class_name: color = (190, 190, 200)
             elif "Inspector" in class_name: color = (200, 200, 210)
             elif "Canvas" in class_name: color = (255, 255, 255)
             elif "Splitter" in class_name: color = (230, 230, 230)
-            
-            # Fill
             pygame.draw.rect(screen, color, (pos.x, pos.y, self._rect.width, self._rect.height))
-            # Border
             pygame.draw.rect(screen, (120, 120, 130), (pos.x, pos.y, self._rect.width, self._rect.height), 1)
-            
-            # Label the widget container if it's large enough
             if self._rect.width > 50 and self._rect.height > 20:
                 font = pygame.font.SysFont(None, 18)
                 txt = font.render(class_name, True, (80, 80, 90))
                 screen.blit(txt, (pos.x + 4, pos.y + 4))
     def statusBar(self):
         class MockStatusBar:
-            def addWidget(self, w): pass
+            def addWidget(self, w): w._set_parent(QApplication._instance._windows[0]); w.show()
         return MockStatusBar()
     def setAcceptDrops(self, b): pass
     def addAction(self, action): pass
@@ -268,12 +251,11 @@ class QWidget(QObject):
 class QMainWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent); self._screen = None; self._central_widget = None
-        (QApplication._instance._windows.append(self) if QApplication._instance else None)
-    def setMenuBar(self, menu_bar): pass
+        if QApplication._instance: QApplication._instance._windows.append(self)
+    def setMenuBar(self, menu_bar): menu_bar._set_parent(self); menu_bar.show()
     def setCentralWidget(self, widget):
         self._central_widget = widget
-        widget._set_parent(self)
-        widget.show()
+        widget._set_parent(self); widget.show()
         widget._rect = pygame.Rect(0, 0, self._rect.width, self._rect.height)
     def show(self):
         super().show()
@@ -281,71 +263,79 @@ class QMainWindow(QWidget):
     def _draw(self, pos): (self._screen.fill((230, 230, 235)) if self._screen else None)
 
 class QDialog(QWidget):
-    def __init__(self, parent=None): super().__init__(parent)
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        if not parent and QApplication._instance: QApplication._instance._windows.append(self)
     def exec(self): self.show(); return 1
 
 class QVBoxLayout:
     def __init__(self, parent=None):
-        self.items = []; self._parent = parent
+        self.items, self._parent = [], parent
         if parent and hasattr(parent, 'setLayout'): parent.setLayout(self)
     def addWidget(self, w, alignment=0):
-        self.items.append(w)
-        if self._parent and hasattr(w, '_set_parent'): w._set_parent(self._parent)
+        self.items.append(w); (w._set_parent(self._parent) if self._parent else None)
     def addLayout(self, l): self.items.append(l); l._parent = self._parent
     def addStretch(self, s=0): pass
     def setContentsMargins(self, *args): pass
     def setSpacing(self, s): pass
     def arrange(self, rect):
-        if not self.items: return
-        n = len(self.items); h = rect.height / n
-        for i, item in enumerate(self.items):
+        visible_items = [i for i in self.items if getattr(i, 'isVisible', lambda: True)()]
+        if not visible_items: return
+        h = rect.height / len(visible_items)
+        for i, item in enumerate(visible_items):
             r = pygame.Rect(0, i*h, rect.width, h)
             if hasattr(item, '_rect'): item._rect = r
             if hasattr(item, '_layout') and item._layout: item._layout.arrange(r)
             elif hasattr(item, 'arrange'): item.arrange(r)
+
 class QHBoxLayout:
     def __init__(self, parent=None):
-        self.items = []; self._parent = parent
+        self.items, self._parent = [], parent
         if parent and hasattr(parent, 'setLayout'): parent.setLayout(self)
     def addWidget(self, w, alignment=0):
-        self.items.append(w)
-        if self._parent and hasattr(w, '_set_parent'): w._set_parent(self._parent)
+        self.items.append(w); (w._set_parent(self._parent) if self._parent else None)
     def addLayout(self, l): self.items.append(l); l._parent = self._parent
     def addStretch(self, s=0): pass
     def setContentsMargins(self, *args): pass
     def setSpacing(self, s): pass
     def arrange(self, rect):
-        if not self.items: return
-        n = len(self.items); w = rect.width / n
-        for i, item in enumerate(self.items):
+        visible_items = [i for i in self.items if getattr(i, 'isVisible', lambda: True)()]
+        if not visible_items: return
+        w = rect.width / len(visible_items)
+        for i, item in enumerate(visible_items):
             r = pygame.Rect(i*w, 0, w, rect.height)
             if hasattr(item, '_rect'): item._rect = r
             if hasattr(item, '_layout') and item._layout: item._layout.arrange(r)
             elif hasattr(item, 'arrange'): item.arrange(r)
+
 class QSplitter(QWidget):
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
-        super().__init__(parent); self._items = []; self._orientation = orientation
-    def addWidget(self, w): 
-        self._items.append(w); w._set_parent(self); w.show()
-    def setSizes(self, sizes): pass
+        super().__init__(parent); self._items, self._orientation, self._sizes = [], orientation, None
+    def addWidget(self, w): self._items.append(w); w._set_parent(self); w.show()
+    def setSizes(self, sizes): self._sizes = sizes
     def _draw_recursive(self, offset=pygame.Vector2(0,0)):
         if not self.isVisible(): return
-        if self._items:
-            n = len(self._items)
-            if self._orientation == Qt.Orientation.Horizontal:
-                w = self._rect.width / n
-                for i, item in enumerate(self._items):
-                    item._rect = pygame.Rect(i*w, 0, w, self._rect.height)
-            else:
-                h = self._rect.height / n
-                for i, item in enumerate(self._items):
-                    item._rect = pygame.Rect(0, i*h, self._rect.width, h)
+        visible_items = [i for i in self._items if i.isVisible()]
+        if visible_items:
+            n = len(visible_items)
+            proportions = [self._sizes[self._items.index(i)] for i in visible_items] if self._sizes and len(self._sizes) == len(self._items) else [1]*n
+            total = sum(proportions); curr = 0
+            for i, item in enumerate(visible_items):
+                p = proportions[i] / total
+                if self._orientation == Qt.Orientation.Horizontal:
+                    w = int(self._rect.width * p)
+                    item._rect = pygame.Rect(curr, 0, w, self._rect.height); curr += w
+                else:
+                    h = int(self._rect.height * p)
+                    item._rect = pygame.Rect(0, curr, self._rect.width, h); curr += h
         super()._draw_recursive(offset)
+
 class QFileDialog:
     @staticmethod
     def getOpenFileName(*args): return ("", "")
     @staticmethod
     def getSaveFileName(*args): return ("", "")
+
 class QMessageBox:
     StandardButton = type('StandardButton', (), {'Yes':1, 'No':0})
     @staticmethod
@@ -356,37 +346,35 @@ class QMessageBox:
     def critical(*args): pass
     @staticmethod
     def question(*args): return 0
+
 class QLabel(QWidget):
     def __init__(self, text="", parent=None): super().__init__(parent); self._text = text
     def setText(self, text): self._text = text
     def text(self): return self._text
     def _draw(self, pos):
-        font = pygame.font.SysFont(None, 24)
+        font = pygame.font.SysFont(None, 22)
         txt = font.render(self._text, True, (20, 20, 20))
         screen = QApplication._instance._windows[0]._screen
         if screen: screen.blit(txt, (pos.x + 2, pos.y + 2))
+
 class QPushButton(QWidget):
     def __init__(self, text="", parent=None): super().__init__(parent); self._text = text
     def setText(self, text): self._text = text
     def _draw(self, pos):
         screen = QApplication._instance._windows[0]._screen
         if screen:
-            # Button states (simplified)
             color = (100, 150, 240)
-            if pygame.Rect(pos.x, pos.y, self._rect.width, self._rect.height).collidepoint(pygame.mouse.get_pos()):
-                color = (120, 170, 255)
+            if pygame.Rect(pos.x, pos.y, self._rect.width, self._rect.height).collidepoint(pygame.mouse.get_pos()): color = (120, 170, 255)
             pygame.draw.rect(screen, color, (pos.x, pos.y, self._rect.width, self._rect.height), border_radius=4)
             pygame.draw.rect(screen, (50, 80, 180), (pos.x, pos.y, self._rect.width, self._rect.height), 1, border_radius=4)
             font = pygame.font.SysFont(None, 18)
             txt = font.render(self._text, True, (255, 255, 255))
-            tw, th = txt.get_size()
-            screen.blit(txt, (pos.x + (self._rect.width - tw)//2, pos.y + (self._rect.height - th)//2))
+            screen.blit(txt, (pos.x + (self._rect.width - txt.get_width())//2, pos.y + (self._rect.height - txt.get_height())//2))
 
 class QGraphicsScene(QObject):
     selectionChanged = Signal()
     def __init__(self, parent=None):
-        super().__init__(parent); self.items_list, self._bg_brush, self._scene_rect = [], None, QRectF(0,0,800,600)
-        self._views = []
+        super().__init__(parent); self.items_list, self._bg_brush, self._scene_rect = [], None, QRectF(0,0,800,600); self._views = []
     def views(self): return self._views
     def addItem(self, item): self.items_list.append(item); item._scene = self
     def removeItem(self, item): (self.items_list.remove(item), setattr(item, '_scene', None)) if item in self.items_list else None
@@ -451,8 +439,7 @@ class QGraphicsRectItem(QGraphicsItem):
 
 class QGraphicsPixmapItem(QGraphicsItem):
     class ShapeMode: BoundingRectShape = 1
-    def __init__(self, pixmap=None, parent=None):
-        super().__init__(parent); self._pixmap = pixmap
+    def __init__(self, pixmap=None, parent=None): super().__init__(parent); self._pixmap = pixmap
     def pixmap(self): return self._pixmap
     def setPixmap(self, p): self._pixmap = p
     def setShapeMode(self, mode): pass
@@ -467,15 +454,6 @@ class QGraphicsTextItem(QGraphicsItem):
     def defaultTextColor(self): return self._color
     def setFont(self, f): self._font = f
     def font(self): return self._font
-    def setTextInteractionFlags(self, flags): pass
-    def textInteractionFlags(self): return 0
-    def setFocus(self): pass
-    def textCursor(self):
-        class MockCursor:
-            class SelectionType: Document = 1
-            def select(self, t): pass
-        return MockCursor()
-    def setTextCursor(self, c): pass
     def boundingRect(self): return QRectF(0,0,100,20)
     def paint(self, surface, offset):
         font = pygame.font.SysFont(self._font._family, self._font._size)
@@ -487,43 +465,29 @@ class QGraphicsView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent); self._scene = None; self.sceneChanged = Signal(); self.joinRequested = Signal()
     def setScene(self, scene):
-        self._scene = scene
-        if scene: scene._views.append(self)
+        if scene: self._scene = scene; scene._views.append(self)
     def viewport(self): return self
-    def setCursor(self, cursor): pass
-    def scale(self, sx, sy): pass
-    def setRenderHint(self, hint, on=True): pass
-    def setDragMode(self, mode): pass
-    def setTransformationAnchor(self, anchor): pass
-    def setResizeAnchor(self, anchor): pass
+    def setRenderHint(self, h, on=True): pass
+    def setDragMode(self, m): pass
+    def setTransformationAnchor(self, a): pass
+    def setResizeAnchor(self, a): pass
     def mapToScene(self, p): return QPointF(p.x, p.y)
     def _draw(self, pos):
         screen = QApplication._instance._windows[0]._screen
         if self._scene and screen:
-            pygame.draw.rect(screen, (255, 255, 255), (pos.x, pos.y, self._rect.width, self._rect.height))
+            pygame.draw.rect(screen, (240, 240, 240), (pos.x, pos.y, self._rect.width, self._rect.height))
             [item.paint(screen, pos) for item in self._scene.items() if item.isVisible()]
-    def _handle_event(self, event, offset):
-        my_pos = offset + pygame.Vector2(self._rect.topleft)
-        if event.type == pygame.MOUSEBUTTONDOWN and self._scene:
-            # Transform mouse pos to local view coordinates
-            local_pos = pygame.Vector2(event.pos) - my_pos
-            q_event = QMouseEvent(local_pos, event.button, pygame.key.get_mods())
-            self._scene.mousePressEvent(q_event)
-        super()._handle_event(event, offset)
+    def mousePressEvent(self, ev):
+        if self._scene: self._scene.mousePressEvent(ev)
 
 class QPainter:
     class RenderHint: Antialiasing = 1; SmoothPixmapTransform = 2
     def __init__(self, device=None): pass
-    def save(self):
-        pass
-    def restore(self):
-        pass
-    def setPen(self, pen):
-        pass
-    def setBrush(self, brush):
-        pass
-    def drawRect(self, rect):
-        pass
+    def save(self): pass
+    def restore(self): pass
+    def setPen(self, pen): pass
+    def setBrush(self, brush): pass
+    def drawRect(self, rect): pass
 
 class QPen:
     def __init__(self, *args): pass
@@ -532,203 +496,176 @@ class QBrush:
 class QTransform:
     @staticmethod
     def fromScale(sx, sy): return QTransform()
-    def m11(self):
-        return 1.0
-    def m22(self):
-        return 1.0
+    def m11(self): return 1.0
+    def m22(self): return 1.0
+
 class QUndoStack(QObject):
     def __init__(self, parent=None): super().__init__(parent)
     def push(self, cmd): cmd.redo()
     def undo(self): pass
     def redo(self): pass
-    def beginMacro(self, title): pass
+    def beginMacro(self, text): pass
     def endMacro(self): pass
-    def redo(self):
-        pass
-    def beginMacro(self, text):
-        pass
-    def endMacro(self):
-        pass
+
 class QUndoCommand:
     def __init__(self, text=""): pass
-    def redo(self):
-        pass
-    def undo(self):
-        pass
+    def redo(self): pass
+    def undo(self): pass
+
 class QSettings(QObject):
     def __init__(self, *args): super().__init__()
     def value(self, key, default=None, type=None): return default
     def setValue(self, key, val): pass
+
 class QMenuBar(QWidget):
-    def addMenu(self, title):
-        m = QMenu(title, self)
-        return m
+    def __init__(self, parent=None): super().__init__(parent); self._menus = []
+    def addMenu(self, title): m = QMenu(title, self); self._menus.append(m); return m
+    def _draw(self, pos):
+        screen = QApplication._instance._windows[0]._screen
+        if screen:
+            pygame.draw.rect(screen, (240, 240, 240), (pos.x, pos.y, self._rect.width, 30))
+            curr_x = pos.x + 10; font = pygame.font.SysFont(None, 16)
+            for m in self._menus:
+                txt = font.render(m._title, True, (20, 20, 20)); screen.blit(txt, (curr_x, pos.y + 8)); curr_x += txt.get_width() + 20
+
 class QMenu(QWidget):
-    def __init__(self, title="", parent=None):
-        super().__init__(parent)
-        self.title = title
-        self.menu_edit = self
-    def addAction(self, text):
-        return QAction(text)
-    def addMenu(self, arg):
-        if isinstance(arg, str):
-            return QMenu(arg, self)
-        return arg
-    def clear(self):
-        pass
-    def addSeparator(self):
-        pass
-    def exec(self, pos=None):
-        return None
+    def __init__(self, title="", parent=None): super().__init__(parent); self._title, self._actions = title, []
+    def addAction(self, text): a = QAction(text, self); self._actions.append(a); return a
+    def addMenu(self, arg): return QMenu(arg, self) if isinstance(arg, str) else arg
+    def clear(self): self._actions = []
+    def addSeparator(self): pass
+    def exec(self, pos=None): pass
+
 class QAction(QObject):
     triggered, toggled = Signal(), Signal(bool)
     def __init__(self, text="", parent=None): super().__init__(parent); self.text = text
-    def setShortcut(self, s):
-        pass
-    def setEnabled(self, e):
-        pass
-    def setVisible(self, v):
-        pass
-    def setCheckable(self, b):
-        pass
-    def setChecked(self, b):
-        pass
+    def setShortcut(self, s): pass
+    def setEnabled(self, e): pass
+    def setVisible(self, v): pass
+    def setCheckable(self, b): pass
+    def setChecked(self, b): pass
+
 class QSlider(QWidget):
     valueChanged = Signal(int)
-    def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None): super().__init__(parent)
-    def setMinimum(self, v): pass
-    def setMaximum(self, v): pass
-    def setSingleStep(self, v): pass
-    def setPageStep(self, v): pass
-    def setValue(self, v): pass
-    def value(self): return 0
-    def setGeometry(self, rect): pass
+    def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None):
+        super().__init__(parent); self._val, self._min, self._max = 50, 0, 100
+    def setRange(self, mi, ma): self._min, self._max = mi, ma
+    def setMinimum(self, v): self._min = v
+    def setMaximum(self, v): self._max = v
+    def setValue(self, v): self._val = v; self.valueChanged.emit(v)
+    def value(self): return self._val
+    def _draw(self, pos):
+        screen = QApplication._instance._windows[0]._screen
+        if screen:
+            cy = pos.y + self._rect.height // 2
+            pygame.draw.line(screen, (150, 150, 150), (pos.x+10, cy), (pos.x+self._rect.width-10, cy), 2)
+            r = (self._val - self._min) / (self._max - self._min) if self._max > self._min else 0.5
+            pygame.draw.rect(screen, (100, 150, 240), (pos.x + 10 + int((self._rect.width-20)*r)-5, cy-10, 10, 20))
+    def mousePressEvent(self, ev):
+        if self._rect.width > 20: 
+            r = max(0, min(1, (ev.pos().x() - 10) / (self._rect.width - 20)))
+            self.setValue(int(self._min + r * (self._max - self._min)))
+
 class QAbstractItemView(QWidget):
-    class SelectionMode: SingleSelection = 1; MultiSelection = 2; ExtendedSelection = 3
-    class DragDropMode: NoDragDrop = 0; DragOnly = 1; DropOnly = 2; DragDrop = 3; InternalMove = 4
+    class SelectionMode: SingleSelection = 1; MultiSelection = 2; ExtendedSelection = 3; ContourSelection = 4
+    class DragDropMode: NoDragDrop = 0; InternalMove = 4
+    def setDragDropMode(self, m): pass
+    def setSelectionMode(self, m): pass
+
 class QHeaderView:
-    class ResizeMode: Stretch = 1; ResizeToContents = 2
-    def setSectionResizeMode(self, col, mode): pass
+    class ResizeMode: Stretch = 1; ResizeToContents = 2; Fixed = 3; Interactive = 0
+    def setSectionResizeMode(self, c, m): pass
+
+class QStyledItemDelegate: pass
+class QStyleOptionViewItem: pass
 class QTreeWidget(QAbstractItemView):
-    itemChanged = Signal(object, int)
-    itemSelectionChanged = Signal()
-    customContextMenuRequested = Signal(object)
+    itemChanged, itemSelectionChanged, customContextMenuRequested = Signal(object, int), Signal(), Signal(object)
     def __init__(self, parent=None):
-        super().__init__(parent); self.tree = self
-        self._items = []
-        self._root = QTreeWidgetItem(self)
-        self._header = QHeaderView()
+        super().__init__(parent); self._items, self._header = [], QHeaderView(); self._root = QTreeWidgetItem(self); self.tree = self
     def clear(self): self._items = []
     def invisibleRootItem(self): return self._root
-    def setHeaderLabels(self, labels): pass
     def header(self): return self._header
-    def setItemDelegateForColumn(self, col, delegate): pass
+    def setHeaderLabels(self, l): pass
+    def setItemDelegateForColumn(self, c, d): pass
     def setContextMenuPolicy(self, p): pass
     def setDragEnabled(self, b): pass
     def setAcceptDrops(self, b): pass
-    def setDragDropMode(self, mode): pass
-    def setSelectionMode(self, mode): pass
     def topLevelItem(self, i): return self._items[i] if i < len(self._items) else None
-    def indexOfTopLevelItem(self, item): return self._items.index(item) if item in self._items else -1
-    def takeTopLevelItem(self, i): return self._items.pop(i) if i < len(self._items) else None
-    def itemAt(self, pos): return None
+    def _draw(self, pos):
+        super()._draw(pos)
+        screen = QApplication._instance._windows[0]._screen
+        if screen:
+            pygame.draw.rect(screen, (240, 240, 240), (pos.x, pos.y, self._rect.width, 25))
+            txt = pygame.font.SysFont(None, 14).render("Element | Type | Vis | Opacity", True, (50, 50, 50))
+            screen.blit(txt, (pos.x + 5, pos.y + 5))
+
 class QTreeWidgetItem:
     def __init__(self, parent=None):
-        self._parent = parent
-        self._children = []
-        self._data = {}
-        self._text = {}
+        self._parent, self._children, self._data, self._text = parent, [], {}, {}
         if parent and hasattr(parent, 'addChild'): parent.addChild(self)
-    def data(self, col, role): return self._data.get((col, role))
-    def setData(self, col, role, val): self._data[(col, role)] = val
-    def checkState(self, col): return Qt.CheckState.Unchecked
-    def setCheckState(self, col, s): pass
+    def data(self, c, r): return self._data.get((c, r))
+    def setData(self, c, r, v): self._data[(c, r)] = v
+    def text(self, c): return self._text.get(c, "")
+    def setText(self, c, t): self._text[c] = t
+    def addChild(self, i): self._children.append(i); i._parent = self
     def childCount(self): return len(self._children)
     def child(self, i): return self._children[i]
-    def text(self, col): return self._text.get(col, "")
-    def setText(self, col, text): self._text[col] = text
-    def setFlags(self, f): pass
-    def flags(self): return 0
-    def setExpanded(self, b): pass
-    def isExpanded(self): return False
-    def addChild(self, item): self._children.append(item); item._parent = self
     def parent(self): return self._parent if isinstance(self._parent, QTreeWidgetItem) else None
-    def removeChild(self, item): (self._children.remove(item) if item in self._children else None)
-    def indexOfChild(self, item): return self._children.index(item) if item in self._children else -1
-    def insertChild(self, i, item): self._children.insert(i, item); item._parent = self
-    def takeChild(self, i): return self._children.pop(i)
-class QStyledItemDelegate: pass
-class QStyleOptionViewItem: pass
-class QStyleOptionViewItem: pass
+
 class QListWidget(QAbstractItemView):
     class ViewMode: IconMode = 1; ListMode = 0
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.itemClicked = Signal()
-        self._items = []
-        class MockModel:
-            def __init__(self): self.rowsMoved = Signal()
-        self._model = MockModel()
-    def setIconSize(self, size): pass
-    def setViewMode(self, mode): pass
-    def setSelectionMode(self, mode): pass
+        super().__init__(parent); self.itemClicked, self._items = Signal(), []
+        self._model = type('MockModel', (), {'rowsMoved': Signal()})()
+    def setIconSize(self, s): pass
+    def setViewMode(self, m): pass
+    def setSelectionMode(self, m): pass
     def setDragEnabled(self, b): pass
     def setDropIndicatorShown(self, b): pass
-    def setDragDropMode(self, mode): pass
+    def setDragDropMode(self, m): pass
     def model(self): return self._model
-    def addItem(self, item): self._items.append(item); item._list = self
-    def item(self, i): return self._items[i]
+    def addItem(self, i): self._items.append(i); i._list = self
     def count(self): return len(self._items)
     def clear(self): self._items = []
+
 class QListWidgetItem:
     def __init__(self, *args):
         self._data = {}
-        if len(args) > 1 and isinstance(args[0], QIcon): self.text = args[1]; self.icon = args[0]
+        if len(args) > 1: self.text = args[1]
         elif len(args) > 0: self.text = args[0]
-    def setData(self, role, val): self._data[role] = val
-    def data(self, role): return self._data.get(role)
+    def setData(self, r, v): self._data[r] = v
+    def data(self, r): return self._data.get(r)
+
 class QTabWidget(QWidget):
-    def addTab(self, w, label): pass
+    def addTab(self, w, l): pass
 class QTextEdit(QWidget):
-    def setHtml(self, html): pass
-    def setReadOnly(self, b): pass
-class QUndoView(QWidget): pass
+    def setHtml(self, h): pass
+class QUndoView(QWidget):
+    def __init__(self, stack=None, parent=None): super().__init__(parent); self._stack = stack
 class QScrollArea(QWidget):
     class Shape: NoFrame = 0
     def setWidget(self, w): pass
     def setWidgetResizable(self, b): pass
-    def setFrameShape(self, s): pass
+
 class QBuffer:
-    def __init__(self):
-        pass
-    def open(self, mode):
-        pass
-    def data(self):
-        class MockData:
-            def data(self): return b""
-        return MockData()
+    def open(self, m): pass
+    def data(self): return type('MockData', (), {'data': lambda: b""})()
 class QIODevice:
     class OpenModeFlag: ReadWrite = 1
 class QMimeData:
-    def hasImage(self):
-        return False
-    def hasText(self):
-        return False
+    def hasImage(self): return False
 class QModelIndex: pass
 class QPrinter: pass
 class QIcon:
-    def __init__(self, *args):
-        if len(args) > 0: self.pixmap = args[0]
+    def __init__(self, *args): (setattr(self, 'pixmap', args[0]) if args else None)
 class QKeySequence:
     class StandardKey: Cut = 1; Copy = 2; Paste = 3
     @staticmethod
     def matches(k1, k2): return False
-    def __init__(self, *args): pass
 class QDrag:
-    def __init__(self, *args):
-        pass
-    def exec(self, *args):
-        pass
+    def __init__(self, *args): pass
+    def exec(self, *args): pass
+
 def pyqtSignal(*args): return Signal(*args)
 
 __all__ = [
@@ -739,8 +676,9 @@ __all__ = [
     'QPen', 'QBrush', 'QColor', 'QTransform', 'QUndoStack', 'QUndoCommand',
     'QSettings', 'QMenuBar', 'QMenu', 'QAction', 'QSlider', 'QTreeWidget',
     'QTreeWidgetItem', 'QHeaderView', 'QAbstractItemView', 'QStyledItemDelegate',
-    'QStyleOptionViewItem', 'QListWidget', 'QListWidgetItem', 'QTabWidget',
-    'QTextEdit', 'QUndoView', 'QScrollArea', 'QBuffer', 'QIODevice', 'QMimeData',
-    'QModelIndex', 'QPrinter', 'QKeySequence', 'QPointF', 'QRectF', 'QSize',
-    'QPixmap', 'QImage', 'QFont', 'QMouseEvent', 'QIcon', 'QDrag'
+    'QStyleOptionViewItem', 'QListWidget', 
+    'QListWidgetItem', 'QTabWidget', 'QTextEdit', 'QUndoView', 'QScrollArea', 
+    'QBuffer', 'QIODevice', 'QMimeData', 'QModelIndex', 'QPrinter', 
+    'QKeySequence', 'QPointF', 'QRectF', 'QSize', 'QPixmap', 'QImage', 
+    'QFont', 'QMouseEvent', 'QIcon', 'QDrag'
 ]
