@@ -6,6 +6,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential \
     python3-dev \
+    libclang-dev \
+    swig \
     libgl1 \
     libdbus-1-3 \
     libxcb-xinerama0 \
