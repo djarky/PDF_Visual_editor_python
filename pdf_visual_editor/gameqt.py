@@ -461,16 +461,17 @@ class QTreeWidget(QWidget):
         super().__init__(parent); self.tree = self
         self._items = []
         self._root = QTreeWidgetItem(self)
-        class MockHeader:
-            class ResizeMode: Stretch = 1; ResizeToContents = 2
-            def setSectionResizeMode(self, col, mode): pass
-        self._header = MockHeader()
+        self._header = QHeaderView()
     def clear(self): self._items = []
     def invisibleRootItem(self): return self._root
     def setHeaderLabels(self, labels): pass
     def header(self): return self._header
     def setItemDelegateForColumn(self, col, delegate): pass
     def setContextMenuPolicy(self, p): pass
+    def setDragEnabled(self, b): pass
+    def setAcceptDrops(self, b): pass
+    def setDragDropMode(self, mode): pass
+    def setSelectionMode(self, mode): pass
     def topLevelItem(self, i): return self._items[i] if i < len(self._items) else None
     def indexOfTopLevelItem(self, item): return self._items.index(item) if item in self._items else -1
     def takeTopLevelItem(self, i): return self._items.pop(i) if i < len(self._items) else None
@@ -500,7 +501,9 @@ class QTreeWidgetItem:
     def indexOfChild(self, item): return self._children.index(item) if item in self._children else -1
     def insertChild(self, i, item): self._children.insert(i, item); item._parent = self
     def takeChild(self, i): return self._children.pop(i)
-class QHeaderView: pass
+class QHeaderView:
+    class ResizeMode: Stretch = 1; ResizeToContents = 2
+    def setSectionResizeMode(self, col, mode): pass
 class QAbstractItemView: pass
 class QStyledItemDelegate: pass
 class QStyleOptionViewItem: pass
