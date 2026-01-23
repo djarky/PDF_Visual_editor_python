@@ -29,6 +29,13 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libffi-dev \
+    g++ \
+    libjpeg-dev \
+    libqpdf-dev \
+    zlib1g-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libtiff-dev \
     && ln -s /usr/lib/i386-linux-gnu/libclang-*.so.1 /usr/lib/i386-linux-gnu/libclang.so \
     && rm -rf /var/lib/apt/lists/*
 
