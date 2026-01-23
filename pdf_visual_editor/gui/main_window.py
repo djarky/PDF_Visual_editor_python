@@ -17,6 +17,7 @@ from omar_format import OmarFormat
 from utils.geometry import CoordinateConverter
 from gui.commands import AddItemCommand, DeleteItemCommand, EditTextCommand
 import os
+import sys
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -188,8 +189,12 @@ class MainWindow(QMainWindow):
             settings.setValue("theme", "system")
             return
 
-        import os
-        theme_file = os.path.join(os.path.dirname(__file__), os.path.pardir, "themes", f"{theme_name}_theme.qss")
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.join(os.path.dirname(__file__), os.path.pardir)
+            
+        theme_file = os.path.join(base_dir, "themes", f"{theme_name}_theme.qss")
         try:
             with open(theme_file, 'r') as f:
                 stylesheet = f.read()

@@ -17,6 +17,7 @@ class Qt:
     class CheckState: Checked = 2; Unchecked = 0
     class PenStyle: SolidLine = 1; DashLine = 2
     class BrushStyle: SolidPattern = 1; NoBrush = 0
+    class TextInteractionFlag: NoTextInteraction = 0; TextEditorInteraction = 1
 
 class Signal:
     def __init__(self, *args): self._slots = []
@@ -233,6 +234,8 @@ class QGraphicsScene(QObject):
     selectionChanged = Signal()
     def __init__(self, parent=None):
         super().__init__(parent); self.items_list, self._bg_brush, self._scene_rect = [], None, QRectF(0,0,800,600)
+        self._views = []
+    def views(self): return self._views
     def addItem(self, item): self.items_list.append(item); item._scene = self
     def removeItem(self, item): (self.items_list.remove(item), setattr(item, '_scene', None)) if item in self.items_list else None
     def items(self): return sorted(self.items_list, key=lambda i: i.zValue())
@@ -273,6 +276,7 @@ class QGraphicsItem:
     def scale(self): return 1.0
     def rotation(self): return 0.0
     def setRotation(self, r): pass
+    def update(self): pass
     def mapToScene(self, *args): return QPointF(*args) + self._pos
     def mapFromScene(self, *args): return QPointF(*args) - self._pos
     def sceneBoundingRect(self):
@@ -295,9 +299,11 @@ class QGraphicsRectItem(QGraphicsItem):
 
 class QGraphicsPixmapItem(QGraphicsItem):
     class ShapeMode: BoundingRectShape = 1
-    def __init__(self, pixmap=None, parent=None): super().__init__(parent); self._pixmap = pixmap
+    def __init__(self, pixmap=None, parent=None):
+        super().__init__(parent); self._pixmap = pixmap
     def pixmap(self): return self._pixmap
     def setPixmap(self, p): self._pixmap = p
+    def setShapeMode(self, mode): pass
     def boundingRect(self): return self._pixmap.rect() if self._pixmap else QRectF(0,0,0,0)
     def paint(self, surface, offset):
         if self._pixmap and self._pixmap.surface: surface.blit(self._pixmap.surface, (self._pos.x() + offset.x(), self._pos.y() + offset.y()))
@@ -309,6 +315,15 @@ class QGraphicsTextItem(QGraphicsItem):
     def defaultTextColor(self): return self._color
     def setFont(self, f): self._font = f
     def font(self): return self._font
+    def setTextInteractionFlags(self, flags): pass
+    def textInteractionFlags(self): return 0
+    def setFocus(self): pass
+    def textCursor(self):
+        class MockCursor:
+            class SelectionType: Document = 1
+            def select(self, t): pass
+        return MockCursor()
+    def setTextCursor(self, c): pass
     def boundingRect(self): return QRectF(0,0,100,20)
     def paint(self, surface, offset):
         font = pygame.font.SysFont(self._font._family, self._font._size)
@@ -317,11 +332,18 @@ class QGraphicsTextItem(QGraphicsItem):
 class QGraphicsView(QWidget):
     class DragMode: RubberBandDrag = 1; NoDrag = 0
     class ViewportAnchor: AnchorUnderMouse = 1
-    def __init__(self, parent=None): super().__init__(parent); self._scene = None; self.sceneChanged = Signal(); self.joinRequested = Signal()
-    def setScene(self, scene): self._scene = scene
+    def __init__(self, parent=None):
+        super().__init__(parent); self._scene = None; self.sceneChanged = Signal(); self.joinRequested = Signal()
+    def setScene(self, scene):
+        self._scene = scene
+        if scene: scene._views.append(self)
     def viewport(self): return self
     def setCursor(self, cursor): pass
     def scale(self, sx, sy): pass
+    def setRenderHint(self, hint, on=True): pass
+    def setDragMode(self, mode): pass
+    def setTransformationAnchor(self, anchor): pass
+    def setResizeAnchor(self, anchor): pass
     def mapToScene(self, p): return QPointF(p.x, p.y)
     def _draw(self):
         screen = QApplication._instance._windows[0]._screen
@@ -429,8 +451,35 @@ class QHeaderView: pass
 class QAbstractItemView: pass
 class QStyledItemDelegate: pass
 class QStyleOptionViewItem: pass
-class QListWidget: pass
-class QListWidgetItem: pass
+class QListWidget(QWidget):
+    class ViewMode: IconMode = 1; ListMode = 0
+    class SelectionMode: SingleSelection = 1; MultiSelection = 2
+    class DragDropMode: NoDragDrop = 0; DragOnly = 1; DropOnly = 2; DragDrop = 3; InternalMove = 4
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.itemClicked = Signal()
+        self._items = []
+        class MockModel:
+            def __init__(self): self.rowsMoved = Signal()
+        self._model = MockModel()
+    def setIconSize(self, size): pass
+    def setViewMode(self, mode): pass
+    def setSelectionMode(self, mode): pass
+    def setDragEnabled(self, b): pass
+    def setDropIndicatorShown(self, b): pass
+    def setDragDropMode(self, mode): pass
+    def model(self): return self._model
+    def addItem(self, item): self._items.append(item); item._list = self
+    def item(self, i): return self._items[i]
+    def count(self): return len(self._items)
+    def clear(self): self._items = []
+class QListWidgetItem:
+    def __init__(self, *args):
+        self._data = {}
+        if len(args) > 1 and isinstance(args[0], QIcon): self.text = args[1]; self.icon = args[0]
+        elif len(args) > 0: self.text = args[0]
+    def setData(self, role, val): self._data[role] = val
+    def data(self, role): return self._data.get(role)
 class QTabWidget(QWidget):
     def addTab(self, w, label): pass
 class QTextEdit(QWidget):
@@ -461,7 +510,8 @@ class QMimeData:
 class QModelIndex: pass
 class QPrinter: pass
 class QIcon:
-    def __init__(self, *args): pass
+    def __init__(self, *args):
+        if len(args) > 0: self.pixmap = args[0]
 class QKeySequence:
     class StandardKey: Cut = 1; Copy = 2; Paste = 3
     @staticmethod
