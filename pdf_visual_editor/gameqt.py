@@ -35,6 +35,9 @@ class QObject:
     def children(self): return self._children
     def blockSignals(self, b): pass
     def signalsBlocked(self): return False
+    def isVisible(self): return False
+    def _handle_event(self, event): pass
+    def _draw_recursive(self): pass
 
 class QPointF:
     def __init__(self, x=0, y=0):
@@ -186,6 +189,8 @@ class QWidget(QObject):
             def addWidget(self, w): pass
         return MockStatusBar()
     def setAcceptDrops(self, b): pass
+    def addAction(self, action): pass
+    def setContextMenuPolicy(self, policy): pass
 
 class QMainWindow(QWidget):
     def __init__(self, parent=None):
@@ -394,8 +399,10 @@ class QTransform:
 class QUndoStack(QObject):
     def __init__(self, parent=None): super().__init__(parent)
     def push(self, cmd): cmd.redo()
-    def undo(self):
-        pass
+    def undo(self): pass
+    def redo(self): pass
+    def beginMacro(self, title): pass
+    def endMacro(self): pass
     def redo(self):
         pass
     def beginMacro(self, text):
@@ -427,6 +434,8 @@ class QMenu(QWidget):
         if isinstance(arg, str):
             return QMenu(arg, self)
         return arg
+    def clear(self):
+        pass
     def addSeparator(self):
         pass
     def exec(self, pos=None):
@@ -454,8 +463,15 @@ class QSlider(QWidget):
     def setValue(self, v): pass
     def value(self): return 0
     def setGeometry(self, rect): pass
-class QTreeWidget(QWidget):
+class QAbstractItemView(QWidget):
+    class SelectionMode: SingleSelection = 1; MultiSelection = 2; ExtendedSelection = 3
+    class DragDropMode: NoDragDrop = 0; DragOnly = 1; DropOnly = 2; DragDrop = 3; InternalMove = 4
+class QHeaderView:
+    class ResizeMode: Stretch = 1; ResizeToContents = 2
+    def setSectionResizeMode(self, col, mode): pass
+class QTreeWidget(QAbstractItemView):
     itemChanged = Signal(object, int)
+    itemSelectionChanged = Signal()
     customContextMenuRequested = Signal(object)
     def __init__(self, parent=None):
         super().__init__(parent); self.tree = self
@@ -501,16 +517,11 @@ class QTreeWidgetItem:
     def indexOfChild(self, item): return self._children.index(item) if item in self._children else -1
     def insertChild(self, i, item): self._children.insert(i, item); item._parent = self
     def takeChild(self, i): return self._children.pop(i)
-class QHeaderView:
-    class ResizeMode: Stretch = 1; ResizeToContents = 2
-    def setSectionResizeMode(self, col, mode): pass
-class QAbstractItemView: pass
 class QStyledItemDelegate: pass
 class QStyleOptionViewItem: pass
-class QListWidget(QWidget):
+class QStyleOptionViewItem: pass
+class QListWidget(QAbstractItemView):
     class ViewMode: IconMode = 1; ListMode = 0
-    class SelectionMode: SingleSelection = 1; MultiSelection = 2
-    class DragDropMode: NoDragDrop = 0; DragOnly = 1; DropOnly = 2; DragDrop = 3; InternalMove = 4
     def __init__(self, parent=None):
         super().__init__(parent)
         self.itemClicked = Signal()
