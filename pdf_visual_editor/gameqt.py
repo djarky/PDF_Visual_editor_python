@@ -44,16 +44,19 @@ class QObject:
 
 class QPointF:
     def __init__(self, x=0, y=0):
-        if isinstance(x, (QPointF, tuple, list, pygame.Vector2)): self._x, self._y = float(x[0] if isinstance(x, (tuple, list, pygame.Vector2)) else x.x()), float(x[1] if isinstance(x, (tuple, list, pygame.Vector2)) else x.y())
-        elif hasattr(x, 'x') and hasattr(x, 'y'): self._x, self._y = x.x(), x.y()
+        if isinstance(x, (QPointF, tuple, list, pygame.Vector2)):
+            if isinstance(x, (tuple, list, pygame.Vector2)): self._x, self._y = float(x[0]), float(x[1])
+            else: self._x, self._y = float(x.x()), float(x.y())
         else: self._x, self._y = float(x), float(y)
     def x(self): return self._x
     def y(self): return self._y
     def setX(self, x): self._x = float(x)
     def setY(self, y): self._y = float(y)
     def __getitem__(self, i): return [self._x, self._y][i]
-    def __add__(self, other): return QPointF(self._x + other.x(), self._y + other.y())
-    def __sub__(self, other): return QPointF(self._x - other.x(), self._y - other.y())
+    def __add__(self, other): 
+        o = QPointF(other); return QPointF(self._x + o.x(), self._y + o.y())
+    def __sub__(self, other):
+        o = QPointF(other); return QPointF(self._x - o.x(), self._y - o.y())
     def __mul__(self, factor): return QPointF(self._x * factor, self._y * factor)
 
 class QSize:
@@ -161,6 +164,9 @@ class QApplication:
             events = pygame.event.get()
             for event in events:
                 if event.type == pygame.QUIT: running = False
+                elif event.type == pygame.VIDEORESIZE:
+                    for win in self._windows:
+                        if isinstance(win, QMainWindow): win.resize(event.w, event.h); win._screen = pygame.display.get_surface()
                 for win in self._windows:
                     if win.isVisible(): win._handle_event(event, pygame.Vector2(0,0))
 
@@ -250,13 +256,28 @@ class QWidget(QObject):
 
 class QMainWindow(QWidget):
     def __init__(self, parent=None):
-        super().__init__(parent); self._screen = None; self._central_widget = None
+        super().__init__(parent); self._screen = None; self._central_widget = None; self._menu_bar = None
         if QApplication._instance: QApplication._instance._windows.append(self)
-    def setMenuBar(self, menu_bar): menu_bar._set_parent(self); menu_bar.show()
+    def setMenuBar(self, menu_bar):
+        self._menu_bar = menu_bar
+        menu_bar._set_parent(self); menu_bar.show()
     def setCentralWidget(self, widget):
         self._central_widget = widget
         widget._set_parent(self); widget.show()
-        widget._rect = pygame.Rect(0, 0, self._rect.width, self._rect.height)
+    def _draw_recursive(self, offset=pygame.Vector2(0,0)):
+        if not self.isVisible(): return
+        menu_h = 35 if self._menu_bar and self._menu_bar.isVisible() else 0
+        if self._menu_bar: self._menu_bar._rect = pygame.Rect(0, 0, self._rect.width, menu_h)
+        if self._central_widget: self._central_widget._rect = pygame.Rect(0, menu_h, self._rect.width, self._rect.height - menu_h)
+        
+        my_pos = offset + pygame.Vector2(self._rect.topleft)
+        self._draw(my_pos)
+        # Draw central widget first, then menu bar on top
+        if self._central_widget: self._central_widget._draw_recursive(my_pos)
+        if self._menu_bar: self._menu_bar._draw_recursive(my_pos)
+        # Draw other children (e.g. status bar)
+        for child in self._children:
+            if child not in (self._central_widget, self._menu_bar): child._draw_recursive(my_pos)
     def show(self):
         super().show()
         if not self._screen: self._screen = pygame.display.set_mode((self._rect.width, self._rect.height), pygame.RESIZABLE)
@@ -518,23 +539,84 @@ class QSettings(QObject):
     def setValue(self, key, val): pass
 
 class QMenuBar(QWidget):
-    def __init__(self, parent=None): super().__init__(parent); self._menus = []
-    def addMenu(self, title): m = QMenu(title, self); self._menus.append(m); return m
+    def __init__(self, parent=None):
+        super().__init__(parent); self._menus = []; self._active_menu = None; self._menu_rects = []
+    def addMenu(self, title):
+        m = QMenu(title, self); self._menus.append(m); return m
     def _draw(self, pos):
-        screen = QApplication._instance._windows[0]._screen
+        screen = pygame.display.get_surface()
         if screen:
-            pygame.draw.rect(screen, (240, 240, 240), (pos.x, pos.y, self._rect.width, 30))
-            curr_x = pos.x + 10; font = pygame.font.SysFont(None, 16)
+            pygame.draw.rect(screen, (240, 240, 240), (pos.x, pos.y, self._rect.width, self._rect.height))
+            pygame.draw.line(screen, (180, 180, 180), (pos.x, pos.y + self._rect.height - 1), (pos.x + self._rect.width, pos.y + self._rect.height - 1))
+            
+            font = pygame.font.SysFont(None, 20)
+            curr_x_local = 12
+            self._menu_rects = []
             for m in self._menus:
-                txt = font.render(m._title, True, (20, 20, 20)); screen.blit(txt, (curr_x, pos.y + 8)); curr_x += txt.get_width() + 20
+                txt = font.render(m._title if m._title else "[?]", True, (30, 30, 35))
+                tw, th = txt.get_size()
+                item_rect_local = pygame.Rect(curr_x_local - 5, 0, tw + 20, self._rect.height)
+                self._menu_rects.append((m, item_rect_local))
+                
+                # Draw hover/active state
+                if self._active_menu == m:
+                     pygame.draw.rect(screen, (200, 210, 230), (pos.x + item_rect_local.x, pos.y, item_rect_local.width, item_rect_local.height))
+                elif item_rect_local.move(pos.x, pos.y).collidepoint(pygame.mouse.get_pos()):
+                     pygame.draw.rect(screen, (225, 230, 240), (pos.x + item_rect_local.x, pos.y, item_rect_local.width, item_rect_local.height))
+                
+                screen.blit(txt, (pos.x + curr_x_local, pos.y + (self._rect.height - th) // 2))
+                if self._active_menu == m: m._draw_dropdown(pygame.Vector2(pos.x + item_rect_local.x, pos.y + self._rect.height))
+                curr_x_local += tw + 25
+    def mousePressEvent(self, ev):
+        # First check if an active menu is open and we clicked an action
+        if self._active_menu:
+            # Dropdown is at (item_x, 35) local to MenuBar
+            # BUT we need to find the item_x
+            for m, rect in self._menu_rects:
+                if m == self._active_menu:
+                    # Dropdown area: (rect.x, self._rect.height) to (rect.x+180, self._rect.height + actions_h)
+                    res = m._handle_dropdown_click(ev.pos() - pygame.Vector2(rect.x, self._rect.height))
+                    if res: self._active_menu = None; return
+                    break
+
+        for m, rect in self._menu_rects:
+            if rect.collidepoint(ev.pos().x(), ev.pos().y()):
+                self._active_menu = (None if self._active_menu == m else m)
+                return
+        self._active_menu = None
 
 class QMenu(QWidget):
     def __init__(self, title="", parent=None): super().__init__(parent); self._title, self._actions = title, []
     def addAction(self, text): a = QAction(text, self); self._actions.append(a); return a
     def addMenu(self, arg): return QMenu(arg, self) if isinstance(arg, str) else arg
     def clear(self): self._actions = []
-    def addSeparator(self): pass
+    def addSeparator(self): self._actions.append("SEP")
     def exec(self, pos=None): pass
+    def _draw_dropdown(self, pos):
+        screen = pygame.display.get_surface()
+        if not screen or not self._actions: return
+        w, h = 180, len(self._actions) * 25
+        pygame.draw.rect(screen, (255, 255, 255), (pos.x, pos.y, w, h))
+        pygame.draw.rect(screen, (150, 150, 150), (pos.x, pos.y, w, h), 1)
+        font = pygame.font.SysFont(None, 18)
+        for i, a in enumerate(self._actions):
+            if a == "SEP":
+                 pygame.draw.line(screen, (220, 220, 220), (pos.x+5, pos.y+i*25+12), (pos.x+w-5, pos.y+i*25+12))
+            else:
+                rect = pygame.Rect(pos.x, pos.y + i*25, w, 25)
+                if rect.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(screen, (0, 120, 215), rect)
+                    txt = font.render(a.text, True, (255, 255, 255))
+                else:
+                    txt = font.render(a.text, True, (40, 40, 40))
+                screen.blit(txt, (pos.x + 10, pos.y + i*25 + 5))
+    def _handle_dropdown_click(self, local_pos):
+        if 0 <= local_pos.x() <= 180 and 0 <= local_pos.y() <= len(self._actions) * 25:
+            idx = int(local_pos.y() // 25)
+            if 0 <= idx < len(self._actions):
+                a = self._actions[idx]
+                if a != "SEP": a.triggered.emit(); return True
+        return False
 
 class QAction(QObject):
     triggered, toggled = Signal(), Signal(bool)
