@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libxcb-util1 \
     python3-pyqt5 \
     binutils \
+    && ln -s /usr/lib/i386-linux-gnu/libclang-*.so.1 /usr/lib/i386-linux-gnu/libclang.so \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
