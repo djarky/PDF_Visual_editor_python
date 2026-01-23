@@ -18,6 +18,8 @@ class Qt:
     class PenStyle: SolidLine = 1; DashLine = 2
     class BrushStyle: SolidPattern = 1; NoBrush = 0
     class TextInteractionFlag: NoTextInteraction = 0; TextEditorInteraction = 1
+    class ContextMenuPolicy: CustomContextMenu = 1
+    class ItemFlag: ItemIsEditable = 1
 
 class Signal:
     def __init__(self, *args): self._slots = []
@@ -200,11 +202,23 @@ class QDialog(QWidget):
     def exec(self): self.show(); return 1
 
 class QVBoxLayout:
-    def __init__(self, parent=None): self.items = []
-    def addWidget(self, w): self.items.append(w)
+    def __init__(self, parent=None):
+        self.items = []
+        if parent and hasattr(parent, 'setLayout'): parent.setLayout(self)
+    def addWidget(self, w, alignment=0): self.items.append(w)
+    def addLayout(self, l): self.items.append(l)
+    def addStretch(self, s=0): pass
+    def setContentsMargins(self, *args): pass
+    def setSpacing(self, s): pass
 class QHBoxLayout:
-    def __init__(self, parent=None): self.items = []
-    def addWidget(self, w): self.items.append(w)
+    def __init__(self, parent=None):
+        self.items = []
+        if parent and hasattr(parent, 'setLayout'): parent.setLayout(self)
+    def addWidget(self, w, alignment=0): self.items.append(w)
+    def addLayout(self, l): self.items.append(l)
+    def addStretch(self, s=0): pass
+    def setContentsMargins(self, *args): pass
+    def setSpacing(self, s): pass
 class QSplitter(QWidget):
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None): super().__init__(parent)
     def addWidget(self, w): pass
@@ -433,20 +447,59 @@ class QAction(QObject):
 class QSlider(QWidget):
     valueChanged = Signal(int)
     def __init__(self, orientation=Qt.Orientation.Horizontal, parent=None): super().__init__(parent)
+    def setMinimum(self, v): pass
+    def setMaximum(self, v): pass
+    def setSingleStep(self, v): pass
+    def setPageStep(self, v): pass
+    def setValue(self, v): pass
+    def value(self): return 0
+    def setGeometry(self, rect): pass
 class QTreeWidget(QWidget):
-    def __init__(self, parent=None): super().__init__(parent); self.tree = self
-    def clear(self):
-        pass
-    def invisibleRootItem(self):
-        return QTreeWidgetItem()
+    itemChanged = Signal(object, int)
+    customContextMenuRequested = Signal(object)
+    def __init__(self, parent=None):
+        super().__init__(parent); self.tree = self
+        self._items = []
+        self._root = QTreeWidgetItem(self)
+        class MockHeader:
+            class ResizeMode: Stretch = 1; ResizeToContents = 2
+            def setSectionResizeMode(self, col, mode): pass
+        self._header = MockHeader()
+    def clear(self): self._items = []
+    def invisibleRootItem(self): return self._root
+    def setHeaderLabels(self, labels): pass
+    def header(self): return self._header
+    def setItemDelegateForColumn(self, col, delegate): pass
+    def setContextMenuPolicy(self, p): pass
+    def topLevelItem(self, i): return self._items[i] if i < len(self._items) else None
+    def indexOfTopLevelItem(self, item): return self._items.index(item) if item in self._items else -1
+    def takeTopLevelItem(self, i): return self._items.pop(i) if i < len(self._items) else None
+    def itemAt(self, pos): return None
 class QTreeWidgetItem:
-    def __init__(self, *args): self._children = []
-    def data(self, col, role): return None
+    def __init__(self, parent=None):
+        self._parent = parent
+        self._children = []
+        self._data = {}
+        self._text = {}
+        if parent and hasattr(parent, 'addChild'): parent.addChild(self)
+    def data(self, col, role): return self._data.get((col, role))
+    def setData(self, col, role, val): self._data[(col, role)] = val
     def checkState(self, col): return Qt.CheckState.Unchecked
-    def childCount(self):
-        return 0
-    def child(self, i):
-        return None
+    def setCheckState(self, col, s): pass
+    def childCount(self): return len(self._children)
+    def child(self, i): return self._children[i]
+    def text(self, col): return self._text.get(col, "")
+    def setText(self, col, text): self._text[col] = text
+    def setFlags(self, f): pass
+    def flags(self): return 0
+    def setExpanded(self, b): pass
+    def isExpanded(self): return False
+    def addChild(self, item): self._children.append(item); item._parent = self
+    def parent(self): return self._parent if isinstance(self._parent, QTreeWidgetItem) else None
+    def removeChild(self, item): (self._children.remove(item) if item in self._children else None)
+    def indexOfChild(self, item): return self._children.index(item) if item in self._children else -1
+    def insertChild(self, i, item): self._children.insert(i, item); item._parent = self
+    def takeChild(self, i): return self._children.pop(i)
 class QHeaderView: pass
 class QAbstractItemView: pass
 class QStyledItemDelegate: pass
