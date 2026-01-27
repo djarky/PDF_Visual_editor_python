@@ -19,6 +19,6 @@ __all__ = [
     'QStyleOptionViewItem', 'QListWidget', 
     'QListWidgetItem', 'QTabWidget', 'QTextEdit', 'QUndoView', 'QScrollArea', 
     'QBuffer', 'QIODevice', 'QMimeData', 'QModelIndex', 'QPrinter', 
-    'QKeySequence', 'QPointF', 'QRectF', 'QSize', 'QPixmap', 'QImage', 
-    'QFont', 'QMouseEvent', 'QIcon', 'QDrag'
+    'QKeySequence', 'QPointF', 'QPoint', 'QRectF', 'QSize', 'QPixmap', 'QImage', 
+    'QFont', 'QMouseEvent', 'QWheelEvent', 'QIcon', 'QDrag'
 ]

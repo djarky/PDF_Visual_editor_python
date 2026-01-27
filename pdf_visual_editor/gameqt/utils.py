@@ -70,38 +70,7 @@ class QSettings(QObject):
             with open(self._path, 'w') as f: json.dump(self._cache, f)
         except: pass
 
-class QFileDialog:
-    @staticmethod
-    def getOpenFileName(parent=None, caption="", directory="", filter="", *args):
-        print(f"[QFileDialog] Open File: {caption}")
-        return ("", "")
-    @staticmethod
-    def getSaveFileName(parent=None, caption="", directory="", filter="", *args):
-        print(f"[QFileDialog] Save File: {caption}")
-        return ("", "")
-    @staticmethod
-    def getExistingDirectory(parent=None, caption="", directory="", *args):
-        print(f"[QFileDialog] Select Directory: {caption}")
-        return ""
-
-class QMessageBox:
-    StandardButton = type('StandardButton', (), {'Yes':1, 'No':0})
-    @staticmethod
-    def information(parent, title, text, *args):
-        print(f"[QMessageBox] INFO: {title} - {text}")
-        return 0
-    @staticmethod
-    def warning(parent, title, text, *args):
-        print(f"[QMessageBox] WARNING: {title} - {text}")
-        return 0
-    @staticmethod
-    def critical(parent, title, text, *args):
-        print(f"[QMessageBox] CRITICAL: {title} - {text}")
-        return 0
-    @staticmethod
-    def question(parent, title, text, *args):
-        print(f"[QMessageBox] QUESTION: {title} - {text}")
-        return 0
+# QFileDialog and QMessageBox are provided by widgets.py for interactive use.
 
 class QBuffer:
     def __init__(self):
@@ -135,10 +104,6 @@ class QDrag:
     def exec(self, *args): 
         print(f"[QDrag] Executing drag operation")
         return 0
-
-class QUndoView(QWidget):
-    # This inherits from QWidget, imported locally
-    pass
 
 from .widgets import QWidget
 class QUndoView(QWidget):
