@@ -1,0 +1,68 @@
+LISTA DE PENDIENTES - LIBRERÍA GAMEQT (Actualizada)
+----------------------------------------------
+
+1. GRÁFICOS Y RENDERIZADO (QPainter & GraphicsView)
+--------------------------------------------------
+[x] Implementar dibujo de líneas, elipses y polígonos en QPainter.
+[x] Añadir soporte para gradientes y sombreados básicos.
+[x] Implementar QTransform real (rotación, escalado, inclinación).
+[x] Añadir zoom y desplazamiento (pan) en QGraphicsView.
+[x] Implementar selección por arrastre (rubber-band selection) en la escena.
+[x] Mejorar QPainter.drawText para soportar alineaciones complejas y flags de Qt.
+[x] Implementar lógica de cursores reales en QGraphicsItem y QGraphicsView.
+[x] Implementar métodos virtuales paint(), mousePressEvent() y keyPressEvent() en clases base.
+
+2. WIDGETS DE USUARIO (Faltantes y Mejoras)
+-------------------------------------------
+[x] Crear QLineEdit (entrada de texto básica).
+[x] Crear QCheckBox y QRadioButton (casillas de verificación).
+[x] Crear QComboBox (listas desplegables).
+[x] Crear QSpinBox (campos numéricos con flechas).
+[x] QTreeWidget y QTreeWidgetItem (jerarquía, selección y manipulación).
+[x] Implementar QScrollArea funcional con soporte para wheelEvent.
+[x] Mejorar QTextEdit para soportar scroll y visualización básica.
+[x] Implementar QGroupBox y QToolBar.
+[x] Añadir soporte de CSS básico para QWidget.setStyleSheet.
+[x] Mejorar el parser de HTML (soporte para b, i, color, p, br y tablas básicas).
+[x] Implementar QTextCursor por completo (select, selectedText y navegación por documento).
+[x] Implementar QTreeWidget.scrollToItem.
+[x] Implementar QStatusBar real (showMessage, addPermanentWidget).
+[x] Soporte para Drag & Drop interno (dragEnterEvent/dropEvent en QWidget).
+[/] Implementar setCursor, setWindowFlags, setMinimumSize y setFrameShape funcionales.
+
+3. LAYOUTS Y ORGANIZACIÓN
+-------------------------
+[x] Implementar QGridLayout (organización en rejilla).
+[x] Implementar QFormLayout (parejas etiqueta-campo).
+[x] Implementar QStackedWidget y QStackedLayout (múltiples capas).
+[x] Refinar la lógica de alineación (AlignmentFlags) en todos los layouts.
+[x] Mejorar QGridLayout.addItem para manejar la inserción automática de celdas.
+[x] Mejorar QFormLayout para soportar alturas de fila dinámicas y márgenes por campo.
+
+4. SISTEMA, EVENTOS Y DATOS
+---------------------------
+[x] Implementar sistema de "Event Bubbling" (propagación de hijos a padres).
+[x] Soporte para QWheelEvent y scroll de alta precisión (Laptop Trackpads).
+[x] Soporte de metadatos mediante setData() y data() en QGraphicsItem y QTreeWidget.
+[x] Atajos de teclado (Shortcuts) funcionales a nivel de ventana.
+[x] Soporte para drag & drop externo (archivos al canvas).
+[x] Implementar conexión real con el Portapapeles del sistema (copiar/pegar externo).
+[x] Refinar QClipboard para manejar fallos de pygame.scrap de forma más elegante.
+
+5. DIÁLOGOS Y REFINAMIENTO
+--------------------------
+[x] Crear un QColorDialog para selección de colores.
+[x] Crear un QFontDialog.
+[x] Refinar el explorador de archivos (QFileDialog) para que sea más intuitivo.
+[x] Optimización de renderizado (scaled rendering) en QGraphicsView.
+[x] Mejorar la robustez de los diálogos modales (PyGameModalDialog) para evitar bloqueos en el loop de eventos.
+[x] Implementar QStyledItemDelegate con soporte para personalización completa de dibujado en vistas.
+
+--- RESUMEN ---
+Parte 1 (Gráficos): ✅ Completada (8 de 8 items)
+Parte 2 (Widgets): ✅ Completada (15 de 16 items, 1 en progreso)
+Parte 3 (Layouts): ✅ Completada (6 de 6 items)
+Parte 4 (Sistema): ✅ Completada (7 de 7 items)
+Parte 5 (Diálogos): ✅ Completada (6 de 6 items)
+
+TOTAL: 42 de 43 items completados (97%)
