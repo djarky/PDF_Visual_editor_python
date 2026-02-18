@@ -22,70 +22,52 @@ jobs:
 
       - name: Add upstream remote and fetch
         run: |
-          echo "Adding upstream remote"
-          git remote add gameqt-remote https://github.com/djarky/gameQT.git || echo "Remote already exists"
-          git remote -v
-          echo "Fetching from remote"
-          git fetch gameqt-remote --tags || echo "Fetch failed - verify remote & network"
+          git remote add gameqt-remote https://github.com/djarky/gameQT.git || true
+          git fetch gameqt-remote --tags
 
       - name: Create update branch
-        id: create_branch
         run: |
-          echo "Creating branch for syncing"
           BRANCH="update/gameqt-test"
-          git checkout -b "${BRANCH}"
-          echo "Branch created: ${BRANCH}"
-          echo "BRANCH=${BRANCH}" >> $GITHUB_ENV
+          git checkout -B "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
-      - name: Add or pull subtree (squash)
+      - name: Add or pull subtree (safe mode)
         env:
           UPSTREAM_BRANCH: main
           PREFIX: pdf_visual_editor/gameqt
         run: |
           set -e
-          echo "Checking if directory $PREFIX exists and non-empty"
-          if [ -d "$PREFIX" ] && [ "$(ls -A "$PREFIX" 2>/dev/null)" ]; then
-            echo "Directory exists, pulling subtree"
-            git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree from djarky/gameQT ($UPSTREAM_BRANCH)"
+          echo "Attempting subtree pull..."
+
+          if git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree ($UPSTREAM_BRANCH)"; then
+            echo "Subtree pull successful"
           else
-            echo "Adding new subtree"
-            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree from djarky/gameQT ($UPSTREAM_BRANCH)"
+            echo "Subtree not found. Adding subtree..."
+            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree ($UPSTREAM_BRANCH)"
           fi
 
-      - name: Record upstream commit and ensure UPSTREAM.md
+      - name: Record upstream commit
         env:
           UPSTREAM_BRANCH: main
           PREFIX: pdf_visual_editor/gameqt
         run: |
-          set -e
-          echo "Recording upstream commit and creating UPSTREAM.md"
-
-          SHA="$(git rev-parse gameqt-remote/$UPSTREAM_BRANCH 2>/dev/null || echo unknown)"
+          SHA="$(git rev-parse gameqt-remote/$UPSTREAM_BRANCH)"
           mkdir -p "$PREFIX"
 
-          printf "Upstream: https://github.com/djarky/gameQT\nBranch: %s\nCommit: %s\nSynced: %s\nNotes: This subtree is kept in sync by .github/workflows/sync-gameqt-subtree.yml\n" \
+          printf "Upstream: https://github.com/djarky/gameQT\nBranch: %s\nCommit: %s\nSynced: %s\n" \
             "$UPSTREAM_BRANCH" \
             "$SHA" \
             "$(date -u --iso-8601=seconds)" \
             > "$PREFIX/UPSTREAM.md"
 
           git add "$PREFIX/UPSTREAM.md"
-          git commit -m "Add/Update UPSTREAM.md for gameqt (sync $SHA)" || echo "No changes to UPSTREAM.md"
+          git commit -m "Update UPSTREAM.md (sync $SHA)" || echo "No metadata changes"
 
-      - name: Push branch if there are changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push branch
         run: |
-          echo "Pushing branch updates: $BRANCH"
-          if [ -n "$(git status --porcelain)" ]; then
-            git push origin "$BRANCH"
-          else
-            echo "No changes to push"
-            exit 0
-          fi
+          git push -u origin "$BRANCH" || echo "Nothing new to push"
 
       - name: Create Pull Request
-        if: success()
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -93,4 +75,4 @@ jobs:
           title: Sync gameQT subtree
           body: |
             This PR was created automatically to sync the GameQT subtree.
-          base: main 
+          base: main
