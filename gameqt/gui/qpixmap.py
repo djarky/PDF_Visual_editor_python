@@ -41,6 +41,38 @@ class QPixmap:
         else: self.surface = None
     @staticmethod
     def fromImage(img): return QPixmap(img.surface) if hasattr(img, 'surface') else QPixmap()
+    
+    def _get_scaled_surface(self, w, h):
+        """Internal method to get or create a cached scaled surface."""
+        if not self.surface: return None
+        if w <= 0 or h <= 0: return None
+        
+        # If size matches original, return original
+        if w == self.width() and h == self.height():
+            return self.surface
+            
+        # Check cache
+        if not hasattr(self, '_scaled_cache'): self._scaled_cache = {}
+        
+        key = (w, h)
+        if key in self._scaled_cache:
+            return self._scaled_cache[key]
+            
+        # Create new scaled surface
+        try:
+            # Use smoothscale for quality, or scale for speed?
+            # Smoothscale is better for text/PDF
+            scaled = pygame.transform.smoothscale(self.surface, (w, h))
+        except:
+             # Fallback if smoothscale fails (e.g. 8-bit surface)
+            scaled = pygame.transform.scale(self.surface, (w, h))
+            
+        # Add to cache (limit size)
+        if len(self._scaled_cache) > 4:
+            self._scaled_cache.clear()
+        self._scaled_cache[key] = scaled
+        return scaled
+
     def width(self): return self.surface.get_width() if self.surface else 0
     def height(self): return self.surface.get_height() if self.surface else 0
     def rect(self): return QRectF(0, 0, self.width(), self.height())

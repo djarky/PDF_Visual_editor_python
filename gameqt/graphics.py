@@ -249,11 +249,20 @@ class QGraphicsView(QWidget):
     def scale(self, sx, sy): self._view_transform.scale(sx, sy)
     def translate(self, dx, dy): self._view_transform.translate(dx, dy)
     def mapToScene(self, p):
-        # p is local to widget. 
-        # Need to invert transform. 
+        """Convert a widget-local point to scene coordinates."""
         tx, ty = self._view_transform._m[6], self._view_transform._m[7]
-        sx, sy = self._view_transform._m[0], self._view_transform._m[4]
+        sx = self._view_transform._m[0]
+        sy = self._view_transform._m[4]
+        if sx == 0: sx = 1.0
+        if sy == 0: sy = 1.0
         return QPointF((p.x() - tx) / sx, (p.y() - ty) / sy)
+
+    def mapFromScene(self, p):
+        """Convert a scene point to widget-local coordinates."""
+        tx, ty = self._view_transform._m[6], self._view_transform._m[7]
+        sx = self._view_transform._m[0]
+        sy = self._view_transform._m[4]
+        return QPointF(p.x() * sx + tx, p.y() * sy + ty)
     def _draw(self, pos):
         screen = self._get_screen()
         if self._scene and screen:
@@ -280,7 +289,11 @@ class QGraphicsView(QWidget):
                 if item.isVisible():
                     # Only paint if item's scene bounding rect intersects visible scene area
                     if item.sceneBoundingRect().intersects(visible_rect):
+                        painter.save()
+                        if hasattr(item, 'opacity'):
+                            painter.setOpacity(item.opacity())
                         item.paint(painter, None, self)
+                        painter.restore()
             
             # Draw rubber band
             if self._rubber_band_rect:
@@ -294,14 +307,58 @@ class QGraphicsView(QWidget):
             screen.set_clip(old_clip)
 
     def mousePressEvent(self, ev):
-        if self._drag_mode == QGraphicsView.DragMode.RubberBandDrag and ev.button() == Qt.MouseButton.LeftButton:
-            self._rubber_band_start = ev.pos()
-            self._rubber_band_rect = QRectF(ev.pos().x(), ev.pos().y(), 0, 0)
-        elif ev.button() == Qt.MouseButton.RightButton: # Right drag to pan
-            self._is_panning = True
-            self._last_pan_pos = ev.pos()
+        # Prepare scene position
+        scene_pos = self.mapToScene(ev.pos())
         
-        if self._scene: self._scene.mousePressEvent(ev)
+        # Check if we clicked on an item
+        clicked_item = None
+        if self._scene:
+             # Hit test in reverse order (topmost first)
+             clicked_item = next((i for i in reversed(self._scene.items()) if i.isVisible() and i.sceneBoundingRect().contains(scene_pos)), None)
+
+        if clicked_item and (clicked_item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable or clicked_item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable):
+             # Clicked on interactable item -> prioritize drag/select over rubberband
+             pass
+        elif self._drag_mode == QGraphicsView.DragMode.RubberBandDrag and ev.button() == Qt.MouseButton.LeftButton:
+             self._rubber_band_start = ev.pos()
+             self._rubber_band_rect = QRectF(ev.pos().x(), ev.pos().y(), 0, 0)
+        elif ev.button() == Qt.MouseButton.RightButton: # Right drag to pan
+             self._is_panning = True
+             self._last_pan_pos = ev.pos()
+        
+        if self._scene and hasattr(self, '_scene') and self._scene: 
+            # Transform event to scene coordinates for the scene
+            # We need to create a copy or modify the event pos? 
+            # gameqt events are wrappers around pygame events.
+            # QGraphicsScene.mousePressEvent expects the event to have a pos() method.
+            # We should probably map the pos in the event, or the scene should use the view to map?
+            # Standard Qt: View transforms event to scene coords before passing to Scene.
+            
+            # Let's mock the pos() method on the event or create a proxy
+            # But event objects in gameqt might be shared?
+            # gameqt.core.QMouseEvent is simple.
+            # Let's just monkey-patch or subclass?
+            # Better: The scene currently does: pos = event.pos()
+            # We can update the event with scene pos if we can.
+            # gameqt events are likely created in widgets/qwidget.py
+            
+            # Since gameqt is simple, we can just temporarily modify the event pos?
+            # Or just let the scene handle it?
+            # QGraphicsScene.mousePressEvent currently:
+            # pos = event.pos(); ... item.sceneBoundingRect().contains(pos)
+            # This confirms Scene expects SCENE COORDINATES.
+            # So View MUST map them.
+            
+            scene_pos = self.mapToScene(ev.pos())
+            # Create a new event or modify?
+            # gameqt.core.QMouseEvent has _pos.
+            old_pos = ev.pos()
+            ev._pos = scene_pos # Hack: update internal pos
+            self._scene.mousePressEvent(ev)
+            ev._pos = old_pos # Restore for other handlers if any
+            
+            # Initialize drag state in scene coords
+            self._last_scene_mouse_pos = scene_pos
 
     def mouseMoveEvent(self, ev):
         # Cursor logic
@@ -326,17 +383,19 @@ class QGraphicsView(QWidget):
             handled = True
             
         if not handled and self._scene and pygame.mouse.get_pressed()[0]:
-             if not hasattr(self, '_last_mouse_pos'):
-                 self._last_mouse_pos = ev.pos()
+             scene_pos = self.mapToScene(ev.pos())
+             if not hasattr(self, '_last_scene_mouse_pos'):
+                 self._last_scene_mouse_pos = scene_pos
                  return
              
-             delta = ev.pos() - self._last_mouse_pos
-             # Scale delta? No, items are in scene coords.
+             # Calculate delta in SCENE coordinates
+             delta = scene_pos - self._last_scene_mouse_pos
+             
              for item in self._scene.selectedItems():
                  if item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable:
                      item.setPos(item.pos() + delta)
              
-             self._last_mouse_pos = ev.pos()
+             self._last_scene_mouse_pos = scene_pos
              self.sceneChanged.emit()
              
     def mouseReleaseEvent(self, ev):
@@ -352,6 +411,24 @@ class QGraphicsView(QWidget):
             for item in self._scene.items():
                 if item.isVisible() and scene_rect.intersects(item.sceneBoundingRect()):
                     item.setSelected(True)
+        
+        # Clear drag state
+        if hasattr(self, '_last_scene_mouse_pos'):
+            del self._last_scene_mouse_pos
+            
+        if self._scene:
+            # Pass release event to scene (mapped)
+            scene_pos = self.mapToScene(ev.pos())
+            old_pos = ev.pos()
+            ev._pos = scene_pos
+            # Scene doesn't implement mouseReleaseEvent yet? it wraps item.mouseReleaseEvent?
+            # QGraphicsItem doesn't have mouseReleaseEvent in definition above, but check below...
+            # The base class has mousePressEvent.
+            # Assuming Scene might have it or we should add it.
+            # Checking QGraphicsScene class... no mouseReleaseEvent defined in file shown.
+            # But standard checks might expect it.
+            pass
+            ev._pos = old_pos
             
             self._rubber_band_rect = None
         
@@ -360,8 +437,39 @@ class QGraphicsView(QWidget):
             del self._last_mouse_pos
 
     def wheelEvent(self, ev):
-        # Default behavior: scroll vertically
+        """Handle wheel events: Ctrl+Wheel = zoom (anchored to mouse), plain Wheel = scroll."""
+        import pygame
+        mods = ev.modifiers()
+        ctrl_held = bool(mods & pygame.KMOD_CTRL)
+
         delta = ev.angleDelta().y()
-        self.translate(0, delta)
+
+        if ctrl_held:
+            # --- Zoom anchored to mouse cursor ---
+            zoom_factor = 1.15 if delta > 0 else 1.0 / 1.15
+
+            # 1. Get the scene point currently under the mouse
+            mouse_local = ev.pos()  # widget-local position
+            scene_pt = self.mapToScene(mouse_local)
+
+            # 2. Apply scale to the transform
+            self._view_transform.scale(zoom_factor, zoom_factor)
+
+            # 3. Compute where that scene point now maps to on screen
+            new_screen_pt = self.mapFromScene(scene_pt)
+
+            # 4. Translate so the scene point stays under the mouse
+            dx = mouse_local.x() - new_screen_pt.x()
+            dy = mouse_local.y() - new_screen_pt.y()
+            # Adjust translation directly (already in screen space)
+            self._view_transform._m[6] += dx
+            self._view_transform._m[7] += dy
+        else:
+            # --- Scroll vertically (pan) ---
+            scroll_speed = 40
+            step = scroll_speed if delta > 0 else -scroll_speed
+            self._view_transform._m[6] += 0
+            self._view_transform._m[7] += step
+
         ev.accept()
 
