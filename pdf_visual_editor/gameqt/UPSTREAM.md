@@ -1,4 +1,4 @@
 Upstream: https://github.com/djarky/gameQT
 Branch: main
-Commit: 951d4b98644574c9c7ae5d801a2813280113c475
-Synced: 2026-02-18T21:13:49+00:00
+Commit: 660700119b03e9ff6a8dc5f13addc5b1afca6860
+Synced: 2026-02-18T22:30:08+00:00
