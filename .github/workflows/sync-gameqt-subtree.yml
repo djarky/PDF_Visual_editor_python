@@ -1,0 +1,95 @@
+name: Sync gameQT subtree
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 0' # semanal, ajusta si quieres
+jobs:
+  sync-subtree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote and fetch
+        run: |
+          git remote add gameqt-remote https://github.com/djarky/gameQT.git || true
+          git fetch gameqt-remote --tags || true
+
+      - name: Create update branch
+        id: create_branch
+        run: |
+          BRANCH="update/gameqt-$(date -u +%Y%m%d-%H%M%S)"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          git checkout -b "${BRANCH}"
+
+      - name: Add or pull subtree (squash)
+        env:
+          UPSTREAM_BRANCH: main
+          PREFIX: pdf_visual_editor/gameqt
+        run: |
+          set -e
+          # If directory exists and non-empty -> pull, else add
+          if [ -d "$PREFIX" ] && [ "$(ls -A $PREFIX 2>/dev/null)" ]; then
+            git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree from djarky/gameQT ($UPSTREAM_BRANCH)"
+          else
+            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree from djarky/gameQT ($UPSTREAM_BRANCH)"
+          fi
+
+      - name: Record upstream commit and ensure UPSTREAM.md
+        env:
+          UPSTREAM_BRANCH: main
+          PREFIX: pdf_visual_editor/gameqt
+        run: |
+          set -e
+          SHA="$(git rev-parse gameqt-remote/$UPSTREAM_BRANCH 2>/dev/null || echo unknown)"
+          mkdir -p "$PREFIX"
+          cat > "$PREFIX/UPSTREAM.md" <<EOF
+Upstream: https://github.com/djarky/gameQT
+Branch: $UPSTREAM_BRANCH
+Commit: $SHA
+Synced: $(date -u --iso-8601=seconds)
+Notes: This subtree is kept in sync by .github/workflows/sync-gameqt-subtree.yml
+EOF
+          git add "$PREFIX/UPSTREAM.md"
+          git commit -m "Add/Update UPSTREAM.md for gameqt (sync $SHA)" || echo "No changes to UPSTREAM.md"
+
+      - name: Push branch if there are changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${BRANCH:-$GITHUB_ENV}"
+          # BRANCH is set in previous step into GITHUB_ENV; read it
+          BRANCH=$(cat $GITHUB_ENV | sed -n 's/^BRANCH=//p' || true)
+          if [ -z "$BRANCH" ]; then
+            echo "Branch variable not found"
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain)" ]; then
+            git push origin "$BRANCH"
+          else
+            echo "No changes to push"
+            exit 0
+          fi
+
+      - name: Create Pull Request
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH=$(cat $GITHUB_ENV | sed -n 's/^BRANCH=//p')
+          TITLE="Automated subtree sync: gameqt"
+          BODY="This PR updates pdf_visual_editor/gameqt from https://github.com/djarky/gameQT (branch main).
+
+Automated by workflow .github/workflows/sync-gameqt-subtree.yml."
+          API="https://api.github.com/repos/${{ github.repository }}/pulls"
+          PAYLOAD=$(jq -n --arg t "$TITLE" --arg h "$BRANCH" --arg b "$BODY" --arg base "main" '{title:$t, head:$h, base:$base, body:$b}')
+          # create PR (if one already exists with same head->base, API will return 422)
+          RESPONSE=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -d "$PAYLOAD" "$API")
+          echo "$RESPONSE" | jq -r '.html_url // .message'
