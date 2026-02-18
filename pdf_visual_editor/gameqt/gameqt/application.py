@@ -23,15 +23,78 @@ class QApplication:
     _clipboard = None
     _global_style = {}
     
+    DEFAULT_SYSTEM_STYLE = """
+    QWidget { 
+        background-color: #f0f0f5; 
+        color: #1e1e23; 
+        font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+        font-size: 10pt;
+    }
+    QMainWindow { 
+        background-color: #e6e6eb; 
+    }
+    QPushButton { 
+        background-color: #e1e1e6; 
+        border: 1px solid #a0a0aa; 
+        border-radius: 2px; 
+        color: #1e1e23;
+    }
+    QPushButton:hover { 
+        background-color: #d2d2d7; 
+        border-color: #787882;
+    }
+    QPushButton:pressed { 
+        background-color: #c8c8cd; 
+    }
+    QLineEdit { 
+        background-color: #ffffff; 
+        border: 1px solid #b4b4be; 
+        color: #1e1e23;
+    }
+    QLineEdit:focus { 
+        border: 1px solid #0078d7; 
+    }
+    QLabel { 
+        color: #1e1e23; 
+        background-color: transparent;
+    }
+    QSplitter::handle { 
+        background-color: #c8c8cd; 
+    }
+    QSplitter::handle:hover { 
+        background-color: #a0a0aa; 
+    }
+    QMenuBar { 
+        background-color: #f0f0f5; 
+        border-bottom: 1px solid #d2d2d7;
+    }
+    QMenuBar::item:selected { 
+        background-color: #d2d2d7; 
+    }
+    QMenu { 
+        background-color: #ffffff; 
+        border: 1px solid #b4b4be;
+    }
+    QMenu::item:selected { 
+        background-color: #0078d7; 
+        color: #ffffff;
+    }
+    """
+    
     def __init__(self, args): 
         pygame.init()
         QApplication._instance = self
         QApplication._clipboard = QClipboard()
         self._windows = []
         self._shortcuts = []
-        self._popups = [] # Global popup layer (Z-order)
+        self._popups = [] 
         self._running = False
         self._stylesheet = ""
+        
+        # Initialize global style with default system style
+        from .utils import QSSParser
+        QApplication._global_style = QSSParser.parse(self.DEFAULT_SYSTEM_STYLE)
+        
         try:
             if not pygame.scrap.get_init(): pygame.scrap.init()
         except Exception as e:
@@ -41,7 +104,10 @@ class QApplication:
     def setStyleSheet(self, ss):
         from .utils import QSSParser
         self._stylesheet = ss
-        QApplication._global_style = QSSParser.parse(ss)
+        
+        # If empty, revert to default system style
+        actual_ss = ss if ss.strip() else self.DEFAULT_SYSTEM_STYLE
+        QApplication._global_style = QSSParser.parse(actual_ss)
         
         # Invalidate ALL widget style caches globally
         for win in self._windows:

@@ -61,9 +61,24 @@ class QLabel(QWidget):
              self._doc_lines = parser.lines
              text = "".join(["".join([s['text'] for s in l]) + "\n" for l in self._doc_lines])
         
-        from ..utils.text_renderer import render_text, get_text_metrics
+        from ..utils.text_renderer import render_text
         f = self.font()
-        w, h, asc, desc = get_text_metrics(text, f.family(), f.pointSize(), f.bold(), f.italic())
+        
+        # Resolve Text Color using improved resolver
+        from ..gui import QColor
+        text_color_str = self._get_style_property('color')
+        text_color = (30, 30, 35) # Default
+        if text_color_str:
+            try: text_color = QColor(text_color_str).to_pygame()
+            except: pass
+        else:
+            # Fallback based on background color from QSS
+            bg = self._get_style_property('background-color')
+            if bg and bg.startswith('#'):
+                 c = QColor(bg)
+                 if (c.red()*0.299 + c.green()*0.587 + c.blue()*0.114) < 128:
+                     text_color = (220, 220, 225)
+
         raw_lines = [l.strip() for l in text.split('\n') if l.strip()]
         self._display_lines = raw_lines if raw_lines else [""]
         
@@ -72,29 +87,6 @@ class QLabel(QWidget):
              # Full word wrapping would need a more complex loop, keeping it simple for now
              pass
 
-        from ..gui import QColor
-        text_color_str = self._get_style_property('color')
-        
-        # Default text color based on theme if NOT specified in QSS or local
-        text_color = (30, 30, 30) # Default dark color for light theme
-        if not text_color_str:
-             app_style = QApplication._global_style
-             # Simple heuristic: if QMainWindow has a dark bg, default to light text
-             if app_style and 'QMainWindow' in app_style:
-                 mw_bg = app_style['QMainWindow'].get('background-color', '')
-                 if mw_bg.startswith('#'):
-                     try:
-                         c = QColor(mw_bg)
-                         # If background is dark, use light text
-                         if (c.red()*0.299 + c.green()*0.587 + c.blue()*0.114) < 128:
-                             text_color = (220, 220, 225)
-                     except: pass
-        else:
-            try: text_color = QColor(text_color_str).to_pygame()
-            except: pass
-
-        from ..utils.text_renderer import render_text
-        f = self.font()
         self._line_surfs = [render_text(l, f.family(), f.pointSize(), text_color, f.bold(), f.italic()) for l in self._display_lines]
         
         spacing = 5
@@ -109,6 +101,9 @@ class QLabel(QWidget):
         
     def _draw(self, pos):
         if not hasattr(self, '_line_surfs'): self._calculate_natural_size()
+        
+        # 1. Base QSS drawing (Background/Border)
+        super()._draw(pos)
         
         y = pos.y + self._margin
         if self._alignment == Qt.AlignmentFlag.AlignCenter:

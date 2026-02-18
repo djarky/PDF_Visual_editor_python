@@ -12,39 +12,32 @@ class QMenuBar(QWidget):
         screen = pygame.display.get_surface()
         if not screen: return
         
+        # 1. Base QSS Drawing (background/border)
+        super()._draw(pos)
+        
+        # QMenuBar often has a specific border-bottom in themes
         from .gui import QColor
-        bg_color_str = self._get_style_property('background-color')
-        bg_color = (240, 240, 240)
-        if bg_color_str:
-            try: bg_color = QColor(bg_color_str).to_pygame()
-            except: pass
-            
+        bb = self._get_style_property('border-bottom')
+        if bb:
+            border_color = (180, 180, 180)
+            parts = bb.split()
+            for p in parts:
+                if p.startswith('#') or p in QColor.NAMED_COLORS:
+                    try: border_color = QColor(p).to_pygame()
+                    except: pass
+            pygame.draw.line(screen, border_color, (pos.x, pos.y + self._rect.height - 1), (pos.x + self._rect.width, pos.y + self._rect.height - 1))
+        
         text_color_str = self._get_style_property('color')
         text_color = (30, 30, 35)
         if text_color_str:
             try: text_color = QColor(text_color_str).to_pygame()
             except: pass
             
-        border_color = (180, 180, 180) # Default line
-        # Simple extraction for border-bottom
-        bb = self._get_style_property('border-bottom')
-        if bb:
-            parts = bb.split()
-            for p in parts:
-                if p.startswith('#') or p in QColor.NAMED_COLORS:
-                    try: border_color = QColor(p).to_pygame()
-                    except: pass
-
-        pygame.draw.rect(screen, bg_color, (pos.x, pos.y, self._rect.width, self._rect.height))
-        pygame.draw.line(screen, border_color, (pos.x, pos.y + self._rect.height - 1), (pos.x + self._rect.width, pos.y + self._rect.height - 1))
-        
         font = pygame.font.SysFont(None, 20)
         curr_x_local = 12
         self._menu_rects = []
         for m in self._menus:
-            # Check for item styling
             is_active = (self._active_menu == m)
-            is_hovered = False
             item_rect_local = None # defined below
             
             # Temporary render to get size
@@ -53,24 +46,18 @@ class QMenuBar(QWidget):
             item_rect_local = pygame.Rect(curr_x_local - 5, 0, tw + 20, self._rect.height)
             self._menu_rects.append((m, item_rect_local))
             
-            if is_active:
-                # Active/Selected item style
-                sel_bg_str = self._get_style_property('background-color', pseudo='selected')
-                # Also try QMenuBar::item:selected if we want to be very specific
-                if not sel_bg_str:
-                    app_style = QApplication._global_style
-                    if app_style and "QMenuBar::item:selected" in app_style:
-                        sel_bg_str = app_style["QMenuBar::item:selected"].get('background-color')
+            is_hovered = item_rect_local.move(pos.x, pos.y).collidepoint(pygame.mouse.get_pos())
+            
+            if is_active or is_hovered:
+                # Use sub_element='item' for QMenuBar::item
+                pseudo = 'selected' if is_active or is_hovered else None
+                sel_bg_str = self._get_style_property('background-color', pseudo=pseudo, sub_element='item')
                 
                 sel_bg = (200, 210, 230)
                 if sel_bg_str:
                     try: sel_bg = QColor(sel_bg_str).to_pygame()
                     except: pass
                 pygame.draw.rect(screen, sel_bg, (pos.x + item_rect_local.x, pos.y, item_rect_local.width, item_rect_local.height))
-            elif item_rect_local.move(pos.x, pos.y).collidepoint(pygame.mouse.get_pos()):
-                # Hover style
-                hov_bg = (225, 230, 240)
-                pygame.draw.rect(screen, hov_bg, (pos.x + item_rect_local.x, pos.y, item_rect_local.width, item_rect_local.height))
             
             screen.blit(txt_surface, (pos.x + curr_x_local, pos.y + (self._rect.height - th) // 2))
             curr_x_local += tw + 25
@@ -261,7 +248,6 @@ class QMenu(QWidget):
         # Draw main background
         pygame.draw.rect(screen, bg_color, (pos.x, pos.y, w, h))
         pygame.draw.rect(screen, border_color, (pos.x, pos.y, w, h), 1)
-        # pygame.draw.rect(screen, (100, 100, 100), (pos.x + 2, pos.y + 2, w, h), 1) # Shadow hint
         
         font = pygame.font.SysFont(None, 18)
         mouse_pos = pygame.mouse.get_pos()
@@ -280,17 +266,10 @@ class QMenu(QWidget):
                 label = (a.text if not is_menu else a.text + "  >")
                 
                 if is_hovered or is_active_parent:
-                    # Selection/Hover style
-                    sel_bg_str = self._get_style_property('background-color', pseudo='selected')
-                    sel_color_str = self._get_style_property('color', pseudo='selected')
+                    # Selection/Hover style via sub_element='item'
+                    sel_bg_str = self._get_style_property('background-color', pseudo='selected', sub_element='item')
+                    sel_color_str = self._get_style_property('color', pseudo='selected', sub_element='item')
                     
-                    # check QMenu::item:selected
-                    if not sel_bg_str or not sel_color_str:
-                        app_style = QApplication._global_style
-                        if app_style and "QMenu::item:selected" in app_style:
-                            if not sel_bg_str: sel_bg_str = app_style["QMenu::item:selected"].get('background-color')
-                            if not sel_color_str: sel_color_str = app_style["QMenu::item:selected"].get('color')
-                            
                     sel_bg = (0, 120, 215)
                     if sel_bg_str:
                         try: sel_bg = QColor(sel_bg_str).to_pygame()
@@ -301,7 +280,7 @@ class QMenu(QWidget):
                         try: sel_color = QColor(sel_color_str).to_pygame()
                         except: pass
                     else:
-                        # Fallback: if background is light, use dark text
+                        # Fallback: contrast check
                         if (sel_bg[0]*0.299 + sel_bg[1]*0.587 + sel_bg[2]*0.114) > 186:
                             sel_color = (0, 0, 0)
                         
@@ -314,7 +293,6 @@ class QMenu(QWidget):
                 
                 # Draw submenu if active
                 if is_active_parent:
-                    # Calculate position for submenu (right side of this item)
                     submenu_pos = pygame.Vector2(pos.x + w, pos.y + i*28)
                     a._draw_dropdown(submenu_pos)
 

@@ -35,4 +35,17 @@ class QCheckBox(QWidget):
         txt = render_text(self._text, f.family(), f.pointSize(), text_color, f.bold(), f.italic())
         screen.blit(txt, (pos.x + box_size + 8, pos.y + (self._rect.height - txt.get_height())//2))
     def mousePressEvent(self, ev):
-        self.setChecked(not self._checked)
+        if ev.button() == Qt.MouseButton.LeftButton:
+            self._pressed = True
+            self.update()
+
+    def mouseReleaseEvent(self, ev):
+        if getattr(self, '_pressed', False):
+            self._pressed = False
+            self.update()
+            # Toggle and Emit clicked if release is inside bounds
+            abs_pos = self.mapToGlobal(pygame.Vector2(0,0))
+            rect = pygame.Rect(abs_pos.x, abs_pos.y, self._rect.width, self._rect.height)
+            if rect.collidepoint(pygame.mouse.get_pos()):
+                self.setChecked(not self._checked)
+                self.clicked.emit()
