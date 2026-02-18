@@ -66,4 +66,4 @@ jobs:
           body: |
             Automatic sync of gameQT subtree.
           commit-message: "chore: sync gameQT subtree"
-          delete-branch: false
+          delete-branch: true
