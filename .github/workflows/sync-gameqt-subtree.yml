@@ -23,27 +23,20 @@ jobs:
       - name: Add upstream remote and fetch
         run: |
           git remote add gameqt-remote https://github.com/djarky/gameQT.git || true
-          git fetch gameqt-remote --tags
+          git fetch gameqt-remote main
 
-      - name: Create update branch
-        run: |
-          BRANCH="update/gameqt-test"
-          git checkout -B "$BRANCH"
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-
-      - name: Add or pull subtree (safe mode)
+      - name: Add or pull subtree
         env:
           UPSTREAM_BRANCH: main
           PREFIX: pdf_visual_editor/gameqt
         run: |
           set -e
-          echo "Attempting subtree pull..."
 
-          if git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree ($UPSTREAM_BRANCH)"; then
-            echo "Subtree pull successful"
+          if git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree"; then
+            echo "Subtree updated"
           else
-            echo "Subtree not found. Adding subtree..."
-            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree ($UPSTREAM_BRANCH)"
+            echo "Subtree not found. Adding..."
+            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree"
           fi
 
       - name: Record upstream commit
@@ -52,7 +45,6 @@ jobs:
           PREFIX: pdf_visual_editor/gameqt
         run: |
           SHA="$(git rev-parse gameqt-remote/$UPSTREAM_BRANCH)"
-          mkdir -p "$PREFIX"
 
           printf "Upstream: https://github.com/djarky/gameQT\nBranch: %s\nCommit: %s\nSynced: %s\n" \
             "$UPSTREAM_BRANCH" \
@@ -61,18 +53,17 @@ jobs:
             > "$PREFIX/UPSTREAM.md"
 
           git add "$PREFIX/UPSTREAM.md"
-          git commit -m "Update UPSTREAM.md (sync $SHA)" || echo "No metadata changes"
 
-      - name: Push branch
-        run: |
-          git push -u origin "$BRANCH" || echo "Nothing new to push"
+          git diff --cached --quiet || \
+            git commit -m "Sync gameQT subtree ($SHA)"
 
-      - name: Create Pull Request
+      - name: Create or Update Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: update/gameqt-test
+          branch: update/gameqt
+          base: main
           title: Sync gameQT subtree
           body: |
-            This PR was created automatically to sync the GameQT subtree.
-          base: main
+            Automatic sync of gameQT subtree.
+          commit-message: "chore: sync gameQT subtree"
+          delete-branch: false
