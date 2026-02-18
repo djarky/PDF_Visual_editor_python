@@ -1,8 +1,9 @@
 name: Sync gameQT subtree
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Permite ejecuciones manuales
   schedule:
-    - cron: '0 3 * * 0' # semanal, ajusta si quieres
+    - cron: '0 3 * * 0' # Ejecutar semanalmente, ajuste si es necesario
+
 jobs:
   sync-subtree:
     runs-on: ubuntu-latest
@@ -10,7 +11,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Recupera todo el historial, necesario para `git subtree`
 
       - name: Configure git user
         run: |
@@ -19,35 +20,42 @@ jobs:
 
       - name: Add upstream remote and fetch
         run: |
-          git remote add gameqt-remote https://github.com/djarky/gameQT.git || true
-          git fetch gameqt-remote --tags || true
+          echo "Adding upstream remote"
+          git remote add gameqt-remote https://github.com/djarky/gameQT.git || echo "Remote already exists"
+          git remote -v
+          echo "Fetching from remote"
+          git fetch gameqt-remote --tags || echo "Fetch failed - verify remote & network"
 
       - name: Create update branch
         id: create_branch
         run: |
-          BRANCH="update/gameqt-$(date -u +%Y%m%d-%H%M%S)"
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          echo "Creating branch for syncing"
+          BRANCH="update/gameqt-test"
           git checkout -b "${BRANCH}"
+          echo "Branch created: ${BRANCH}"
 
       - name: Add or pull subtree (squash)
         env:
-          UPSTREAM_BRANCH: main
-          PREFIX: pdf_visual_editor/gameqt
+          UPSTREAM_BRANCH: main # Nombre de la rama del subárbol en el origen
+          PREFIX: pdf_visual_editor/gameqt # Directorio donde se trae el subárbol
         run: |
           set -e
-          # If directory exists and non-empty -> pull, else add
+          echo "Checking if directory $PREFIX exists and non-empty"
           if [ -d "$PREFIX" ] && [ "$(ls -A $PREFIX 2>/dev/null)" ]; then
+            echo "Directory exists, pulling subtree"
             git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree from djarky/gameQT ($UPSTREAM_BRANCH)"
           else
+            echo "Adding new subtree"
             git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree from djarky/gameQT ($UPSTREAM_BRANCH)"
           fi
 
       - name: Record upstream commit and ensure UPSTREAM.md
         env:
-          UPSTREAM_BRANCH: main
-          PREFIX: pdf_visual_editor/gameqt
+          UPSTREAM_BRANCH: main # Rama del origen
+          PREFIX: pdf_visual_editor/gameqt # Prefijo del subárbol sincronizado
         run: |
           set -e
+          echo "Recording upstream commit and creating UPSTREAM.md"
           SHA="$(git rev-parse gameqt-remote/$UPSTREAM_BRANCH 2>/dev/null || echo unknown)"
           mkdir -p "$PREFIX"
           cat > "$PREFIX/UPSTREAM.md" <<EOF
@@ -64,13 +72,7 @@ EOF
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="${BRANCH:-$GITHUB_ENV}"
-          # BRANCH is set in previous step into GITHUB_ENV; read it
-          BRANCH=$(cat $GITHUB_ENV | sed -n 's/^BRANCH=//p' || true)
-          if [ -z "$BRANCH" ]; then
-            echo "Branch variable not found"
-            exit 1
-          fi
+          echo "Pushing branch updates: update/gameqt-test"
           if [ -n "$(git status --porcelain)" ]; then
             git push origin "$BRANCH"
           else
@@ -80,16 +82,11 @@ EOF
 
       - name: Create Pull Request
         if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BRANCH=$(cat $GITHUB_ENV | sed -n 's/^BRANCH=//p')
-          TITLE="Automated subtree sync: gameqt"
-          BODY="This PR updates pdf_visual_editor/gameqt from https://github.com/djarky/gameQT (branch main).
-
-Automated by workflow .github/workflows/sync-gameqt-subtree.yml."
-          API="https://api.github.com/repos/${{ github.repository }}/pulls"
-          PAYLOAD=$(jq -n --arg t "$TITLE" --arg h "$BRANCH" --arg b "$BODY" --arg base "main" '{title:$t, head:$h, base:$base, body:$b}')
-          # create PR (if one already exists with same head->base, API will return 422)
-          RESPONSE=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -d "$PAYLOAD" "$API")
-          echo "$RESPONSE" | jq -r '.html_url // .message'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: update/gameqt-test
+          title: Sync gameQT subtree
+          body: |
+            This PR was created automatically to sync the GameQT subtree.
+          base: main
