@@ -116,7 +116,13 @@ class QTreeWidget(QAbstractItemView):
         header_h = 25
         item_h = 22
         
-        # 1. Header background styling from QHeaderView::section if available
+        labels = getattr(self, '_header_labels', ["Element", "Type", "Vis", "Opacity"])
+        
+        # Seed default sizes on first draw
+        self._header.initDefaultSizes(self._rect.width, len(labels))
+        col_offsets = self._header.columnOffsets(self._rect.width, len(labels))
+        
+        # 1. Header background styling
         header_bg = (240, 240, 243)
         header_text_color = (60, 60, 70)
         header_border_color = (200, 200, 205)
@@ -138,16 +144,27 @@ class QTreeWidget(QAbstractItemView):
                         except: pass
         
         pygame.draw.rect(screen, header_bg, (pos.x, pos.y, self._rect.width, header_h))
-        pygame.draw.line(screen, header_border_color, (pos.x, pos.y + header_h), (pos.x + self._rect.width, pos.y + header_h))
+        pygame.draw.line(screen, header_border_color,
+                         (pos.x, pos.y + header_h), (pos.x + self._rect.width, pos.y + header_h))
         
-        # Header text
-        labels = getattr(self, '_header_labels', ["Element", "Type", "Vis", "Opacity"])
+        # Header text + separator handles
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        sep_hit_zone = 4  # pixels either side of separator
         for i, lbl in enumerate(labels):
-            col_w = self._header.sectionSize(i, self._rect.width, len(labels))
+            col_x, col_w = col_offsets[i]
             txt = font.render(lbl, True, header_text_color)
-            screen.blit(txt, (pos.x + i * col_w + 5, pos.y + (header_h - txt.get_height()) // 2))
+            screen.blit(txt, (pos.x + col_x + 5, pos.y + (header_h - txt.get_height()) // 2))
+            
+            # Draw separator line between columns (not before first)
             if i > 0:
-                pygame.draw.line(screen, header_border_color, (pos.x + i * col_w, pos.y + 2), (pos.x + i * col_w, pos.y + header_h - 2))
+                sep_x = pos.x + col_x
+                # Highlight if mouse is near this separator or we're dragging it
+                is_near = abs(mouse_x - sep_x) <= sep_hit_zone and pos.y <= mouse_y <= pos.y + header_h
+                is_dragging = getattr(self, '_resize_col', None) == i
+                sep_color = (80, 120, 200) if (is_near or is_dragging) else header_border_color
+                sep_width = 2 if (is_near or is_dragging) else 1
+                pygame.draw.line(screen, sep_color,
+                                 (sep_x, pos.y + 2), (sep_x, pos.y + header_h - 2), sep_width)
 
         # Items
         curr_y = pos.y + header_h - getattr(self, '_scroll_y', 0)
@@ -171,31 +188,26 @@ class QTreeWidget(QAbstractItemView):
         def draw_item(item, level, y_offset):
             nonlocal curr_y
             
+            item_h = 22
             # Visibility culling
             if curr_y + item_h < pos.y + header_h:
-                if getattr(item, '_expanded', True):
-                    curr_y += item_h 
+                if item.isExpanded():
                     for i in range(item.childCount()):
                         draw_item(item.child(i), level + 1, y_offset)
-                    curr_y -= item_h
                 curr_y += item_h
                 return
 
             if curr_y > pos.y + self._rect.height: return
             
             is_selected = getattr(item, '_selected', False)
-            
-            # Draw Columns
-            indent = level * 15
+            indent = level * 16
             
             for c, _ in enumerate(labels):
-                col_w = self._header.sectionSize(c, self._rect.width, len(labels))
-                col_x = pos.x + c * col_w
+                col_x_off, col_w = col_offsets[c]
+                col_x = pos.x + col_x_off
                 
-                # Rect for this cell
                 cell_rect = pygame.Rect(col_x, curr_y, col_w, item_h)
                 
-                # Delegate?
                 delegate = self._delegates.get(c) if hasattr(self, '_delegates') else None
                 
                 if delegate:
@@ -203,59 +215,61 @@ class QTreeWidget(QAbstractItemView):
                     option.rect = cell_rect
                     option.state = Qt.ItemFlag.ItemIsSelected if is_selected else 0
                     if is_selected: option.state |= Qt.ItemFlag.ItemIsSelected
-                    
                     index = MockIndex(item, c)
                     delegate.paint(painter, option, index)
                 else:
-                    # Default drawing - Inline implementation
+                    # Default drawing
                     if is_selected:
-                        # Check selection color
-                        sel_bg_str = self._get_style_property('background-color', pseudo='selected')
-                        sel_color_str = self._get_style_property('color', pseudo='selected')
-                        
-                        if not sel_bg_str or not sel_color_str:
-                             if app_style and "QTreeWidget::item:selected" in app_style:
-                                 if not sel_bg_str: sel_bg_str = app_style["QTreeWidget::item:selected"].get('background-color')
-                                 if not sel_color_str: sel_color_str = app_style["QTreeWidget::item:selected"].get('color')
-                        
                         sel_bg = (0, 120, 215)
+                        sel_bg_str = self._get_style_property('background-color', pseudo='selected', sub_element='item')
                         if sel_bg_str:
                             try: sel_bg = QColor(sel_bg_str).to_pygame()
                             except: pass
-                            
-                        sel_color = (255, 255, 255)
-                        if sel_color_str:
-                            try: sel_color = QColor(sel_color_str).to_pygame()
-                            except: pass
-                        else:
-                            # Fallback: if background is light, use dark text
-                            if (sel_bg[0]*0.299 + sel_bg[1]*0.587 + sel_bg[2]*0.114) > 186:
-                                sel_color = (0, 0, 0)
-
                         pygame.draw.rect(screen, sel_bg, cell_rect)
-                        text_color = sel_color
+                        text_color = (255, 255, 255)
                     else:
-                        text_color_str = self._get_style_property('color')
                         text_color = (30, 30, 30)
-                        if text_color_str:
-                            try: text_color = QColor(text_color_str).to_pygame()
-                            except: pass
-                        
-                        # Alternating logic
                         if (curr_y - pos.y - header_h) // item_h % 2 == 1:
-                             # Darker variant of background if possible? For now, fixed neutral
-                             pygame.draw.rect(screen, (max(0, header_bg[0]-5), max(0, header_bg[1]-5), max(0, header_bg[2]-2)), cell_rect)
+                            pygame.draw.rect(screen, (244, 244, 247), cell_rect)
+                    
+                    x_off = 5
+                    if c == 0:
+                        if item.childCount() > 0:
+                            arrow_rect = pygame.Rect(col_x + indent + 2, curr_y + 4, 12, 12)
+                            arrow_color = (100, 100, 110)
+                            if item.isExpanded():
+                                pygame.draw.polygon(screen, arrow_color, [
+                                    (arrow_rect.centerx - 4, arrow_rect.centery - 2),
+                                    (arrow_rect.centerx + 4, arrow_rect.centery - 2),
+                                    (arrow_rect.centerx, arrow_rect.centery + 3)
+                                ])
+                            else:
+                                pygame.draw.polygon(screen, arrow_color, [
+                                    (arrow_rect.centerx - 2, arrow_rect.centery - 4),
+                                    (arrow_rect.centerx - 2, arrow_rect.centery + 4),
+                                    (arrow_rect.centerx + 3, arrow_rect.centery)
+                                ])
+                        x_off = 20 + indent
+
+                    check_state = item.checkState(c)
+                    if check_state is not None:
+                        box_size = 14
+                        box_x = col_x + x_off
+                        box_y = curr_y + (item_h - box_size) // 2
+                        pygame.draw.rect(screen, (255, 255, 255), (box_x, box_y, box_size, box_size))
+                        pygame.draw.rect(screen, (120, 120, 130), (box_x, box_y, box_size, box_size), 1)
+                        if check_state == Qt.CheckState.Checked:
+                            pygame.draw.line(screen, (0, 150, 0), (box_x+3, box_y+box_size//2), (box_x+box_size//2, box_y+box_size-3), 2)
+                            pygame.draw.line(screen, (0, 150, 0), (box_x+box_size//2, box_y+box_size-3), (box_x+box_size-3, box_y+3), 2)
+                        x_off += box_size + 5
 
                     txt_val = item.text(c)
                     if txt_val:
                         txt_surf = font.render(str(txt_val), True, text_color)
-                        # Indent only for col 0
-                        x_off = 5 + indent if c == 0 else 5
                         screen.blit(txt_surf, (col_x + x_off, curr_y + (item_h - txt_surf.get_height()) // 2))
 
             curr_y += item_h
-            
-            if getattr(item, '_expanded', True):
+            if item.isExpanded():
                 for i in range(item.childCount()):
                     draw_item(item.child(i), level + 1, y_offset)
 
@@ -284,25 +298,112 @@ class QTreeWidget(QAbstractItemView):
         
         return flat_items[int(idx)] if 0 <= idx < len(flat_items) else None
 
+    def _get_sep_col_at(self, mx, my):
+        """Return the column index whose LEFT separator is near mx,my (in header zone), or None."""
+        header_h = 25
+        if my > header_h: return None
+        labels = getattr(self, '_header_labels', [])
+        col_offsets = self._header.columnOffsets(self._rect.width, len(labels))
+        sep_hit_zone = 5
+        for i in range(1, len(labels)):
+            sep_x = col_offsets[i][0]
+            if abs(mx - sep_x) <= sep_hit_zone:
+                return i
+        return None
+
     def mousePressEvent(self, ev):
         mx, my = ev.pos().x(), ev.pos().y()
+        
+        # 1. Handle Context Menu
+        if ev.button() == Qt.MouseButton.RightButton:
+            self.customContextMenuRequested.emit(ev.pos())
+            return
+
+        # 2. Check for header separator drag start
+        sep_col = self._get_sep_col_at(mx, my)
+        if sep_col is not None:
+            self._resize_col = sep_col
+            self._resize_start_x = mx
+            labels = getattr(self, '_header_labels', [])
+            self._header.initDefaultSizes(self._rect.width, len(labels))
+            col_offsets = self._header.columnOffsets(self._rect.width, len(labels))
+            # Store the width of the column to the LEFT of the separator
+            self._resize_col_start_w = col_offsets[sep_col - 1][1]
+            return
+
         item = self.itemAt(mx, my)
-        if item:
+        if not item: return
+
+        # 3. Determine Column using actual offsets
+        labels = getattr(self, '_header_labels', [])
+        col_offsets = self._header.columnOffsets(self._rect.width, len(labels))
+        col = -1
+        for i, (cx, cw) in enumerate(col_offsets):
+            if cx <= mx < cx + cw:
+                col = i
+                break
+        if col == -1: return
+
+        # 4. Handle Special Interactive Zones
+        if col == 0:
+            def get_level(curr):
+                lvl = 0; p = curr.parent()
+                while p: lvl += 1; p = p.parent()
+                return lvl
+            level = get_level(item)
+            indent = level * 16
+            if item.childCount() > 0 and mx < col_offsets[0][0] + indent + 20:
+                item.setExpanded(not item.isExpanded())
+                self.update()
+                return
+
+        # 5. Checkbox click
+        check_state = item.checkState(col)
+        if check_state is not None:
+            new_state = Qt.CheckState.Unchecked if check_state == Qt.CheckState.Checked else Qt.CheckState.Checked
+            item.setCheckState(col, new_state)
+            self.itemChanged.emit(item, col)
+            self.update()
+            return
+
+        # 6. Standard Selection
+        if not (pygame.key.get_mods() & pygame.KMOD_CTRL):
             self.clearSelection()
-            item._selected = True
-            
-            # Check for visibility toggle (Column 2)
-            col_w = self._rect.width // 4 # Assume 4 columns
-            col = int(mx // col_w)
-            
-            self.itemSelectionChanged.emit()
-            if col == 2: # Vis column
-                 self.itemChanged.emit(item, 2)
+        item.setSelected(not item.isSelected())
+        self.itemSelectionChanged.emit()
+        self.update()
+
+    def mouseMoveEvent(self, ev):
+        mx, my = ev.pos().x(), ev.pos().y()
+        
+        if getattr(self, '_resize_col', None) is not None:
+            # Dragging a separator → resize the column to the left
+            delta = mx - self._resize_start_x
+            new_w = max(QHeaderView.MIN_SECTION_SIZE, self._resize_col_start_w + delta)
+            self._header.resizeSection(self._resize_col - 1, new_w)
+            self.update()
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_SIZEWE)
+        else:
+            # Hover: change cursor when near a separator in the header
+            sep_col = self._get_sep_col_at(mx, my)
+            if sep_col is not None:
+                pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_SIZEWE)
+            else:
+                pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+
+    def mouseReleaseEvent(self, ev):
+        if getattr(self, '_resize_col', None) is not None:
+            self._resize_col = None
+            self._resize_start_x = None
+            self._resize_col_start_w = None
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+            self.update()
 
 class QTreeWidgetItem:
     def __init__(self, parent=None, strings=None):
         self._parent, self._children, self._data, self._text = parent, [], {}, {}
         self._selected = False; self._expanded = True; self._flags = 0
+        self._check_states = {} # Specific storage for checkstates to allow None
         if isinstance(strings, list):
             for i, s in enumerate(strings): self.setText(i, s)
         elif isinstance(strings, str):
@@ -312,8 +413,8 @@ class QTreeWidgetItem:
     def setFlags(self, f): self._flags = f
     def isSelected(self): return self._selected
     def setSelected(self, b): self._selected = b
-    def checkState(self, column): return self._data.get(('check', column), Qt.CheckState.Unchecked)
-    def setCheckState(self, column, state): self._data[('check', column)] = state
+    def checkState(self, column): return self._check_states.get(column)
+    def setCheckState(self, column, state): self._check_states[column] = state
     def setExpanded(self, b): self._expanded = b
     def isExpanded(self): return self._expanded
     def data(self, c, r): return self._data.get((c, r))
