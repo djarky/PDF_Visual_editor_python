@@ -166,7 +166,7 @@ except ImportError:
                 # Final fall back to our custom GameQt (Pygame-based)
                 try:
                     try:
-                        from .gameqt import (
+                        from .gameqt.gameqt import (
                             QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
                             QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
                             QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
@@ -179,7 +179,7 @@ except ImportError:
                             QUndoCommand, QUndoStack, QAction, QPrinter
                         )
                     except (ImportError, ValueError):
-                        from gameqt import (
+                        from gameqt.gameqt import (
                             QApplication, QMainWindow, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
                             QSplitter, QFileDialog, QMessageBox, QLabel, QTreeWidget, QTreeWidgetItem,
                             QHeaderView, QAbstractItemView, QPushButton, QMenu, QSlider,
