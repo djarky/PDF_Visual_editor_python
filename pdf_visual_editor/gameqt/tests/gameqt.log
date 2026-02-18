@@ -1,0 +1,12 @@
+[2026-02-07 14:02:44] [DEBUG] test.ErrorTestWindow: This is a DEBUG message
+[2026-02-07 14:02:44] [INFO] test.ErrorTestWindow: This is an INFO message
+[2026-02-07 14:02:44] [WARNING] test.ErrorTestWindow: This is a WARNING message
+[2026-02-07 14:02:44] [ERROR] test.ErrorTestWindow: This is an ERROR message
+[2026-02-07 19:50:26] [DEBUG] test.ErrorTestWindow: This is a DEBUG message
+[2026-02-07 19:50:26] [INFO] test.ErrorTestWindow: This is an INFO message
+[2026-02-07 19:50:26] [WARNING] test.ErrorTestWindow: This is a WARNING message
+[2026-02-07 19:50:26] [ERROR] test.ErrorTestWindow: This is an ERROR message
+[2026-02-07 19:58:02] [DEBUG] test.ErrorTestWindow: This is a DEBUG message
+[2026-02-07 19:58:02] [INFO] test.ErrorTestWindow: This is an INFO message
+[2026-02-07 19:58:02] [WARNING] test.ErrorTestWindow: This is a WARNING message
+[2026-02-07 19:58:02] [ERROR] test.ErrorTestWindow: This is an ERROR message
