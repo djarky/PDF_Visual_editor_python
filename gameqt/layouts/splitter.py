@@ -105,23 +105,29 @@ class QSplitter(QWidget):
     def _draw_recursive(self, offset=pygame.Vector2(0,0)):
         if not self.isVisible(): return
         
-        # Ensure geometries are up to date with current rect
-        # Note: We might want to call _update_geometries only on resize, 
-        # but _draw_recursive is often the place where parents pass down size constraints.
-        # Since _rect might have been updated by parent layout, we re-calc here.
-        # However, to avoid jitter during drag, we might want to be careful.
-        # But simple proportional logic is stateless w.r.t prev frame, so it's fine.
-        
         self._update_geometries()
         
         super()._draw_recursive(offset)
         
-        # Draw handles (optional debug or visual)
-        # my_pos = offset + pygame.Vector2(self._rect.topleft)
-        # screen = self._get_screen()
-        # for h_rect in self._handle_rects:
-        #     r = pygame.Rect(my_pos.x + h_rect.x, my_pos.y + h_rect.y, h_rect.width, h_rect.height)
-        #     pygame.draw.rect(screen, (200, 200, 200), r)
+        my_pos = offset + pygame.Vector2(self._rect.topleft)
+        screen = self._get_screen()
+        if not screen: return
+        
+        from ..gui import QColor
+        # Draw handles with QSS support
+        for i, h_rect in enumerate(self._handle_rects):
+            # Check for hover or dragging to set pseudo-state
+            is_active = (self._dragging_index == i or self._hover_index == i)
+            pseudo = "hover" if is_active else None
+            
+            bg_str = self._get_style_property('background-color', pseudo=pseudo, sub_element='handle')
+            handle_color = (200, 200, 205)
+            if bg_str:
+                try: handle_color = QColor(bg_str).to_pygame()
+                except: pass
+            
+            r = pygame.Rect(my_pos.x + h_rect.x, my_pos.y + h_rect.y, h_rect.width, h_rect.height)
+            pygame.draw.rect(screen, handle_color, r)
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:

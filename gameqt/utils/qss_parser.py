@@ -11,32 +11,37 @@ class QSSParser:
         if not qss_text:
             return {}
             
+        # Detect if it's just a set of rules (no blocks)
+        if '{' not in qss_text:
+            return {"*": QSSParser.parse_rules(qss_text)}
+
         # Remove comments: /* ... */
         qss_text = re.sub(r'/\*.*?\*/', '', qss_text, flags=re.DOTALL)
         
         styles = {}
         # Find blocks: selectors { rules }
-        # This regex matches blocks even with nested-ish content or multiple selectors.
         blocks = re.findall(r'([^{]+)\s*\{\s*([^}]+)\s*\}', qss_text)
         
         for selectors, rules in blocks:
-            # Handle multiple selectors separated by comma: QWidget, QMainWindow
+            parsed_rules = QSSParser.parse_rules(rules)
             for selector in selectors.split(','):
                 selector = selector.strip()
-                if not selector:
-                    continue
-                
+                if not selector: continue
                 if selector not in styles:
                     styles[selector] = {}
-                
-                # Parse rules: property: value;
-                # Rules are separated by semicolons.
-                for rule in rules.split(';'):
-                    rule = rule.strip()
-                    if ':' in rule:
-                        prop, val = rule.split(':', 1)
-                        p_name = prop.strip().lower()
-                        p_val = val.strip().lower()
-                        styles[selector][p_name] = p_val
+                styles[selector].update(parsed_rules)
         
         return styles
+
+    @staticmethod
+    def parse_rules(rules_text):
+        """Parses a string of rules like 'color: red; margin: 5px' into a dict."""
+        rules = {}
+        for rule in rules_text.split(';'):
+            rule = rule.strip()
+            if ':' in rule:
+                prop, val = rule.split(':', 1)
+                p_name = prop.strip().lower()
+                p_val = val.strip().lower()
+                rules[p_name] = p_val
+        return rules

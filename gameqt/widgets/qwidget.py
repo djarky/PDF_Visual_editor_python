@@ -134,70 +134,130 @@ class QWidget(QObject):
             return self._layout.sizeHint()
         return QSize(100, 30)
     def setStyleSheet(self, ss):
+        from ..utils import QSSParser
         self._stylesheet = ss
-        # Parse local stylesheet (simple direct properties for now)
-        self._parsed_styles = {}
-        for rule in ss.split(';'):
-            if ':' in rule:
-                k, v = rule.split(':', 1)
-                self._parsed_styles[k.strip().lower()] = v.strip().lower()
+        self._parsed_styles = QSSParser.parse(ss)
         
-        # Invalidate style cache
-        if hasattr(self, '_style_cache'): self._style_cache.clear()
+        # Invalidate style cache recursively for this subtree
+        self._reset_style_cache()
 
         # Notify of style change for dynamic updates (fonts, etc.)
         if hasattr(self, '_calculate_natural_size'):
             self._calculate_natural_size()
         self.update()
 
-    def _get_style_property(self, prop, pseudo=None):
+    def _reset_style_cache(self):
+        if hasattr(self, '_style_cache'): self._style_cache.clear()
+        for child in self._children:
+            if hasattr(child, '_reset_style_cache'):
+                child._reset_style_cache()
+
+    def _get_style_property(self, prop, pseudo=None, sub_element=None):
         """Resolves a style property checking local, parent, and global stylesheets. Cached."""
         if not hasattr(self, '_style_cache'): self._style_cache = {}
-        cache_key = (prop, pseudo)
+        cache_key = (prop, pseudo, sub_element)
         if cache_key in self._style_cache:
             return self._style_cache[cache_key]
 
         inheritable = ['font-size', 'font-family', 'font-weight', 'color', 'text-align']
         
-        # 1. Walk up the parent hierarchy for local overrides or inherited properties
-        curr = self
-        res = None
+        mro_names = [cls.__name__ for cls in self.__class__.mro() if cls.__name__ != 'object']
+        parent_chain = []
+        curr = self._parent
         while curr:
-            if hasattr(curr, '_parsed_styles') and curr._parsed_styles:
-                if (curr == self or prop in inheritable) and prop in curr._parsed_styles:
-                    res = curr._parsed_styles[prop]
-                    break
+            parent_chain.insert(0, [cls.__name__ for cls in curr.__class__.mro() if cls.__name__ != 'object'])
             curr = curr._parent
 
-        if res is None:
-            # 2. Global stylesheet resolution with MRO traversal
-            app_style = QApplication._global_style
-            if app_style:
-                for cls in self.__class__.mro():
-                    cls_name = cls.__name__
-                    if cls_name == 'object': break
+        def find_in_stylesheet(styles, cls_mro, p_chain):
+            """Helper to find best matching style for this widget in a given parsed QSS dict."""
+            best_val = None
+            best_spec = -1
+            for cls_name in cls_mro:
+                for sel in styles:
+                    parts = sel.split()
+                    last_part = parts[-1]
                     
-                    selectors = []
-                    if pseudo: selectors.append(f"{cls_name}:{pseudo}")
-                    selectors.append(cls_name)
+                    # Parsing sel last_part
+                    s_pseudo = None
+                    rem = last_part
+                    if ':' in rem:
+                        idx = rem.rfind(':')
+                        if idx > 0 and rem[idx-1] != ':' and (idx == len(rem)-1 or rem[idx+1] != ':'):
+                             s_pseudo = rem[idx+1:]
+                             rem = rem[:idx]
+                    s_sub = rem.split('::')[1] if '::' in rem else None
+                    s_cls = rem.split('::')[0] if '::' in rem else rem
                     
-                    found = False
-                    for sel in selectors:
-                        if sel in app_style and prop in app_style[sel]:
-                            res = app_style[sel][prop]
-                            found = True
-                            break
-                    if found: break
+                    if s_cls in (cls_name, "*") and s_sub == sub_element and s_pseudo == pseudo:
+                        if len(parts) > 1:
+                            # Descendant
+                            match = True
+                            curr_p_idx = len(p_chain) - 1
+                            for anc_sel in reversed(parts[:-1]):
+                                found = False
+                                while curr_p_idx >= 0:
+                                    if anc_sel in p_chain[curr_p_idx]:
+                                        found = True; curr_p_idx -= 1; break
+                                    curr_p_idx -= 1
+                                if not found: match = False; break
+                            if match and prop in styles[sel]:
+                                if len(parts) > best_spec:
+                                    best_val = styles[sel][prop]; best_spec = len(parts)
+                        else:
+                            if prop in styles[sel] and best_spec <= 1:
+                                best_val = styles[sel][prop]; best_spec = 1
+            return best_val
+
+        # 1. Local overrides (Directly set on this instance via setStyleSheet)
+        if hasattr(self, '_parsed_styles') and self._parsed_styles:
+            # Check for flat properties first (selector "*")
+            if "*" in self._parsed_styles and prop in self._parsed_styles["*"]:
+                if not sub_element and (not pseudo or pseudo in getattr(self, '_active_pseudos', [])):
+                    res = self._parsed_styles["*"][prop]
+                    self._style_cache[cache_key] = res
+                    return res
+            # Check for selector matches in local stylesheet
+            res = find_in_stylesheet(self._parsed_styles, mro_names, parent_chain)
+            if res:
+                self._style_cache[cache_key] = res
+                return res
+
+        # 2. Walk up parent hierarchy for local/regional stylesheets and inheritable properties
+        curr = self._parent
+        curr_p_chain = list(parent_chain)
+        while curr:
+            if hasattr(curr, '_parsed_styles') and curr._parsed_styles:
+                # A. Check for selector matches in parent's stylesheet for THIS widget
+                # When checking parent styles, parent_chain for THIS widget vs parent is same
+                res = find_in_stylesheet(curr._parsed_styles, mro_names, curr_p_chain[:len(curr_p_chain)-1])
+                if res:
+                    self._style_cache[cache_key] = res
+                    return res
                 
-        self._style_cache[cache_key] = res
-        return res
-        # Basic parsing
-        self._styles = {}
-        for rule in ss.split(';'):
-            if ':' in rule:
-                k, v = rule.split(':', 1)
-                self._styles[k.strip().lower()] = v.strip().lower()
-        # Trigger layout update if padding or margins changed (conceptual)
+                # B. Inheritable flat properties from parent
+                if prop in inheritable and "*" in curr._parsed_styles and prop in curr._parsed_styles["*"]:
+                    res = curr._parsed_styles["*"][prop]
+                    self._style_cache[cache_key] = res
+                    return res
+            curr = curr._parent
+            if curr_p_chain: curr_p_chain.pop()
+
+        # 3. Global stylesheet resolution (Application-wide)
+        app_style = QApplication._global_style
+        if app_style:
+            res = find_in_stylesheet(app_style, mro_names, parent_chain)
+            if res:
+                self._style_cache[cache_key] = res
+                return res
+
+        # 4. Fallback: Inherit from parent global style for inheritable properties
+        if prop in inheritable and self._parent:
+            res = self._parent._get_style_property(prop, pseudo, sub_element)
+            self._style_cache[cache_key] = res
+            return res
+
+        self._style_cache[cache_key] = None
+        return None
     def show(self):
         self._visible = True
         if not self._parent and not self._screen:
@@ -274,8 +334,6 @@ class QWidget(QObject):
                     if hasattr(self, 'mousePressEvent'): 
                         self.mousePressEvent(q_event)
                         q_event.accept()
-                    self.clicked.emit()
-                    q_event.accept() # Buttons should accept the event
                 elif event.type == pygame.MOUSEBUTTONUP:
                     if hasattr(self, 'mouseReleaseEvent'): self.mouseReleaseEvent(q_event)
                 elif event.type == pygame.MOUSEMOTION:
@@ -342,17 +400,20 @@ class QWidget(QObject):
         
         from ..gui import QColor
         
-        # Determine pseudo-state (e.g. hover)
+        # Determine pseudo-state
         abs_pos = self.mapToGlobal(QPoint(0,0))
         abs_rect = pygame.Rect(abs_pos.x(), abs_pos.y(), self._rect.width, self._rect.height)
         is_hovered = abs_rect.collidepoint(pygame.mouse.get_pos())
-        pseudo = "hover" if is_hovered else None
+        
+        pseudo = None
+        if getattr(self, '_pressed', False): pseudo = "pressed"
+        elif is_hovered: pseudo = "hover"
+        elif getattr(self, '_focused', False): pseudo = "focus"
         
         # Resolve Styles from QSS (global or local)
         bg_color_str = self._get_style_property('background-color', pseudo)
         border_radius_str = self._get_style_property('border-radius', pseudo)
         border_str = self._get_style_property('border', pseudo)
-        # text_color_str = self._get_style_property('color', pseudo) # Used by subclasses
         
         rect = pygame.Rect(pos.x, pos.y, self._rect.width, self._rect.height)
         
@@ -370,14 +431,23 @@ class QWidget(QObject):
         if final_bg:
             pygame.draw.rect(screen, final_bg, rect, border_radius=radius)
         elif self.__class__.__name__ == 'QMainWindow':
-            # QMainWindow usually handles its own background if not in QSS, 
-            # but let's leave it clear to avoid double draw
-            pass
-        else:
-            # NO hardcoded gray fallback here. 
-            # If it's a generic widget without QSS, let it be transparent or 
-            # inherit from parent by NOT drawing anything.
-            pass
+            # Default QMainWindow bg handled in subclass or here
+            pygame.draw.rect(screen, (230, 230, 235), rect)
+            
+        # 2. Border
+        if border_str:
+            border_color = (120, 120, 130)
+            border_width = 1
+            if 'solid' in border_str:
+                parts = border_str.split()
+                for p in parts:
+                    if p.endswith('px'): 
+                        try: border_width = int(p.replace('px', ''))
+                        except: pass
+                    elif p.startswith('#') or p in QColor.NAMED_COLORS:
+                        try: border_color = QColor(p).to_pygame()
+                        except: pass
+            pygame.draw.rect(screen, border_color, rect, border_width, border_radius=radius)
             
         # 2. Border
         if border_str:

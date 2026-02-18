@@ -131,10 +131,10 @@ sys.exit(app.exec())
 
 ## 📚 Documentation
 
-- **[API Reference](gameqt/API_REFERENCE.md)** - Complete API documentation
-- **[Tutorial](gameqt/TUTORIAL.md)** - Step-by-step tutorials
-- **[Examples](gameqt/EXAMPLES.md)** - Code examples and recipes
-- **[Architecture](gameqt/ARCHITECTURE.md)** - Internal design and architecture
+- **[API Reference](gameqt/docs/API_REFERENCE.md)** - Complete API documentation
+- **[Tutorial](gameqt/docs/TUTORIAL.md)** - Step-by-step tutorials
+- **[Examples](gameqt/docs/EXAMPLES.md)** - Code examples and recipes
+- **[Architecture](gameqt/docs/ARCHITECTURE.md)** - Internal design and architecture
 
 ## 🏗️ Architecture
 

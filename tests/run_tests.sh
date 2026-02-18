@@ -25,16 +25,16 @@ fi
 
 # Check for virtual environment and set python executable
 PYTHON_EXE="python3"
-if [ -d "$PROJECT_ROOT/pdf_visual_editor/.venv" ]; then
-    echo "Using virtual environment at $PROJECT_ROOT/pdf_visual_editor/.venv..."
-    PYTHON_EXE="$PROJECT_ROOT/pdf_visual_editor/.venv/bin/python3"
-elif [ -d "$PROJECT_ROOT/pdf_visual_editor/venv" ]; then
-    echo "Using virtual environment at $PROJECT_ROOT/pdf_visual_editor/venv..."
-    PYTHON_EXE="$PROJECT_ROOT/pdf_visual_editor/venv/bin/python3"
+if [ -d "$PROJECT_ROOT/.venv" ]; then
+    echo "Using virtual environment at $PROJECT_ROOT/.venv..."
+    PYTHON_EXE="$PROJECT_ROOT/.venv/bin/python3"
+elif [ -d "$PROJECT_ROOT/venv" ]; then
+    echo "Using virtual environment at $PROJECT_ROOT/venv..."
+    PYTHON_EXE="$PROJECT_ROOT/venv/bin/python3"
 fi
 
-# Set PYTHONPATH to include the project root and the app directory
-export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/pdf_visual_editor:$PYTHONPATH"
+# Set PYTHONPATH to include the project root and the gameqt library root
+export PYTHONPATH="$PROJECT_ROOT:$PROJECT_ROOT/gameqt:$PYTHONPATH"
 
 # Ensure python is available
 if ! "$PYTHON_EXE" --version > /dev/null 2>&1; then

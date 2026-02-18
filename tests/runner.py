@@ -19,7 +19,7 @@ class TestRunner(QMainWindow):
         self.setWindowTitle("GameQt Test Runner")
         self.resize(900, 700)
         
-        central = QWidget()
+        central = QWidget(self)
         main_layout = QVBoxLayout(central)
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(15, 15, 15, 15)
@@ -28,7 +28,6 @@ class TestRunner(QMainWindow):
         header = QLabel(central)
         header.setText("GameQt Test Suite")
         header.setStyleSheet("font-size: 22px; font-weight: bold;")
-        header.show()
         main_layout.addWidget(header)
         
         # Discover tests
@@ -39,9 +38,9 @@ class TestRunner(QMainWindow):
         tabs.resize(870, 550)
         
         # Visual/Graphical Tests Tab with scroll
-        demo_scroll = QScrollArea()
+        demo_scroll = QScrollArea(tabs)
         demo_scroll.setWidgetResizable(True)
-        demo_content = QWidget()
+        demo_content = QWidget(demo_scroll)
         demo_layout = QVBoxLayout(demo_content)
         demo_layout.setSpacing(6)
         demo_layout.setContentsMargins(10, 10, 10, 10)
@@ -49,7 +48,6 @@ class TestRunner(QMainWindow):
         demo_info = QLabel(demo_content)
         demo_info.setText("🎨 Visual Tests - Open GUI windows")
         demo_info.setStyleSheet("padding: 8px; border-bottom: 1px solid #2196F3;")
-        demo_info.show()
         demo_layout.addWidget(demo_info)
         
         for name, path in demos:
@@ -57,15 +55,13 @@ class TestRunner(QMainWindow):
             demo_layout.addWidget(card)
         
         demo_layout.addStretch(1)
-        demo_content.show()
         demo_scroll.setWidget(demo_content)
-        demo_scroll.show()
         tabs.addTab(demo_scroll, f"Visual ({len(demos)})")
         
         # Console/Unit Tests Tab with scroll
-        unit_scroll = QScrollArea()
+        unit_scroll = QScrollArea(tabs)
         unit_scroll.setWidgetResizable(True)
-        unit_content = QWidget()
+        unit_content = QWidget(unit_scroll)
         unit_layout = QVBoxLayout(unit_content)
         unit_layout.setSpacing(6)
         unit_layout.setContentsMargins(10, 10, 10, 10)
@@ -73,7 +69,6 @@ class TestRunner(QMainWindow):
         unit_info = QLabel(unit_content)
         unit_info.setText("⚙️ Console Tests - Check terminal")
         unit_info.setStyleSheet("padding: 8px; border-bottom: 1px solid #FF9800;")
-        unit_info.show()
         unit_layout.addWidget(unit_info)
         
         for name, path in units:
@@ -81,12 +76,9 @@ class TestRunner(QMainWindow):
             unit_layout.addWidget(card)
         
         unit_layout.addStretch(1)
-        unit_content.show()
         unit_scroll.setWidget(unit_content)
-        unit_scroll.show()
         tabs.addTab(unit_scroll, f"Console ({len(units)})")
         
-        tabs.show()
         main_layout.addWidget(tabs)
         
         # Footer
@@ -94,18 +86,15 @@ class TestRunner(QMainWindow):
         
         stats_label = QLabel(central)
         stats_label.setText(f"Total: {len(demos) + len(units)} tests ({len(demos)} visual, {len(units)} console)")
-        stats_label.show()
         footer_layout.addWidget(stats_label)
         
         exit_btn = QPushButton("Exit", central)
         exit_btn.clicked.connect(self.close)
-        exit_btn.show()
         footer_layout.addWidget(exit_btn)
         
         main_layout.addLayout(footer_layout)
         
         self.setCentralWidget(central)
-        central.show()
 
     def discover_tests(self):
         """Scans directories for tests and demos. Returns (demos, units) as separate lists."""
@@ -168,38 +157,32 @@ class TestRunner(QMainWindow):
         title = QLabel(card)
         title.setText(name)
         title.setStyleSheet("font-weight: bold; border: none; font-size: 13px;")
-        title.show()
         layout.addWidget(title)
         
         # Run button
         run_btn = QPushButton("▶ Run", card)
         run_btn.clicked.connect(lambda: self.run_test(path, name))
         run_btn.setStyleSheet("background-color: #4CAF50; color: white; border: none; padding: 8px 20px; border-radius: 4px; font-size: 13px; min-width: 80px;")
-        run_btn.show()
         layout.addWidget(run_btn)
         
         # Pass checkbox
         pass_chk = QCheckBox("✓ Pass", card)
         pass_chk.setStyleSheet("border: none; padding: 5px; font-size: 12px; color: #4CAF50;")
-        pass_chk.show()
         layout.addWidget(pass_chk)
         
         # Fail checkbox
         fail_chk = QCheckBox("✗ Fail", card)
         fail_chk.setStyleSheet("border: none; padding: 5px; font-size: 12px; color: #F44336;")
-        fail_chk.show()
         layout.addWidget(fail_chk)
         
         # Skip checkbox
         skip_chk = QCheckBox("⊘ Skip", card)
         skip_chk.setStyleSheet("border: none; padding: 5px; font-size: 12px; color: #FF9800;")
-        skip_chk.show()
         layout.addWidget(skip_chk)
         
         # Partial/Incomplete checkbox
         partial_chk = QCheckBox("◐ Partial", card)
         partial_chk.setStyleSheet("border: none; padding: 5px; font-size: 12px; color: #2196F3;")
-        partial_chk.show()
         layout.addWidget(partial_chk)
 
         # Logic to make them mutually exclusive (4 states)
@@ -268,7 +251,7 @@ class TestRunner(QMainWindow):
         skip_chk.stateChanged.connect(on_skip)
         partial_chk.stateChanged.connect(on_partial)
         
-        card.show()
+        
         return card
 
     def run_test(self, path, name=""):
