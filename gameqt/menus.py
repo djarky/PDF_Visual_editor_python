@@ -206,9 +206,72 @@ class QMenu(QWidget):
     def addSeparator(self): self._actions.append("SEP")
     
     def exec(self, pos=None):
-        print(f"[QMenu] Showing popup menu at {pos}")
-        return None
+        if not pos: return None
+        self._popup_pos = pos
+        self._triggered_action = None
+        self._closing = False
         
+        # Intercept action signals
+        original_slots = {}
+        for a in self._actions:
+            if isinstance(a, QAction):
+                def make_interceptor(act):
+                    return lambda: self._on_action_triggered(act)
+                original_slots[a] = a.triggered.connect(make_interceptor(a))
+
+        QApplication.instance().add_popup(self)
+        
+        # Local event loop for modal menu
+        clock = pygame.time.Clock()
+        while not self._closing and QApplication.instance()._running:
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    QApplication.instance().quit()
+                    self._closing = True
+                elif self._handle_popup_event(event):
+                    pass
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    # Clicked outside
+                    self._closing = True
+            
+            # Redraw
+            app = QApplication.instance()
+            for win in app._windows:
+                if win.isVisible(): win._draw_recursive(pygame.Vector2(0,0))
+            for popup in app._popups:
+                if hasattr(popup, '_draw_popup_overlay'): popup._draw_popup_overlay()
+            
+            pygame.display.flip()
+            clock.tick(60)
+            
+        QApplication.instance().remove_popup(self)
+        return self._triggered_action
+
+    def _on_action_triggered(self, action):
+        self._triggered_action = action
+        self._closing = True
+
+    def _draw_popup_overlay(self):
+        if hasattr(self, '_popup_pos'):
+            self._draw_dropdown(pygame.Vector2(self._popup_pos.x(), self._popup_pos.y()))
+
+    def _handle_popup_event(self, event):
+        if not hasattr(self, '_popup_pos'): return False
+        pos = pygame.Vector2(self._popup_pos.x(), self._popup_pos.y())
+        mouse_pos = pygame.mouse.get_pos()
+        local_pos = pygame.Vector2(mouse_pos[0] - pos.x, mouse_pos[1] - pos.y)
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self._handle_dropdown_click(local_pos):
+                return True
+            if not self._rect_contains(local_pos):
+                self._closing = True
+                return False # Let it pass to maybe open another menu
+        elif event.type == pygame.MOUSEMOTION:
+            return self._handle_dropdown_motion(local_pos)
+        return False
+
     def _close_all_submenus(self):
         if self._active_submenu:
             self._active_submenu._close_all_submenus()
