@@ -8,6 +8,8 @@ on:
 jobs:
   sync-subtree:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # NECESARIO para hacer push
 
     steps:
       - name: Checkout repository
@@ -22,21 +24,26 @@ jobs:
 
       - name: Add upstream remote and fetch
         run: |
-          git remote add gameqt-remote https://github.com/djarky/gameQT.git || true
+          if ! git remote | grep -q gameqt-remote; then
+            git remote add gameqt-remote https://github.com/djarky/gameQT.git
+          fi
           git fetch gameqt-remote main
 
-      - name: Add or pull subtree
+      - name: Add or update subtree
         env:
           UPSTREAM_BRANCH: main
           PREFIX: pdf_visual_editor/gameqt
         run: |
           set -e
 
-          if git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated update of gameqt subtree"; then
-            echo "Subtree updated"
+          if [ -d "$PREFIX" ]; then
+            echo "Updating existing subtree..."
+            git subtree pull --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash \
+              -m "Automated update of gameqt subtree"
           else
-            echo "Subtree not found. Adding..."
-            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash -m "Automated add of gameqt subtree"
+            echo "Adding subtree..."
+            git subtree add --prefix="$PREFIX" gameqt-remote "$UPSTREAM_BRANCH" --squash \
+              -m "Automated add of gameqt subtree"
           fi
 
       - name: Record upstream commit
@@ -54,16 +61,10 @@ jobs:
 
           git add "$PREFIX/UPSTREAM.md"
 
-          git diff --cached --quiet || \
+          if ! git diff --cached --quiet; then
             git commit -m "Sync gameQT subtree ($SHA)"
+          fi
 
-      - name: Create or Update Pull Request
-        uses: peter-evans/create-pull-request@v5
-        with:
-          branch: update/gameqt
-          base: main
-          title: Sync gameQT subtree
-          body: |
-            Automatic sync of gameQT subtree.
-          commit-message: "chore: sync gameQT subtree"
-          delete-branch: true
+      - name: Push changes
+        run: |
+          git push origin main
