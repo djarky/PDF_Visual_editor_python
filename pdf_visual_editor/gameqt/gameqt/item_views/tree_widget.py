@@ -44,8 +44,8 @@ class QTreeWidget(QAbstractItemView):
         def traverse(item):
             if hasattr(item, 'isSelected') and item.isSelected(): items.append(item)
             for i in range(item.childCount()): traverse(item.child(i))
-        # Also check top level items
-        for item in self._items: traverse(item)
+        # Start search from root children
+        for i in range(self._root.childCount()): traverse(self._root.child(i))
         return items
     def currentItem(self):
         sel = self.selectedItems()
@@ -60,6 +60,16 @@ class QTreeWidget(QAbstractItemView):
             item.setExpanded(False)
             for i in range(item.childCount()): collapse(item.child(i))
         for i in range(self._root.childCount()): collapse(self._root.child(i))
+    def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
+        item = index.internalPointer()
+        if item:
+            col = index.column()
+            if role == Qt.ItemDataRole.EditRole:
+                item.setText(col, str(value))
+                self.itemChanged.emit(item, col)
+            else:
+                item.setData(col, role, value)
+            self.update()
 
     def scrollToItem(self, item, hint=None):
         # Calculate Y position of the item
@@ -296,7 +306,9 @@ class QTreeWidget(QAbstractItemView):
                 for i in range(item.childCount()): flatten(item.child(i))
         for i in range(self._root.childCount()): flatten(self._root.child(i))
         
-        return flat_items[int(idx)] if 0 <= idx < len(flat_items) else None
+        if 0 <= idx < len(flat_items):
+            return flat_items[int(idx)], int(idx)
+        return None, -1
 
     def _get_sep_col_at(self, mx, my):
         """Return the column index whose LEFT separator is near mx,my (in header zone), or None."""
@@ -331,10 +343,12 @@ class QTreeWidget(QAbstractItemView):
             self._resize_col_start_w = col_offsets[sep_col - 1][1]
             return
 
-        item = self.itemAt(mx, my)
+        item, itemAt_idx = self.itemAt(mx, my)
         if not item: return
 
         # 3. Determine Column using actual offsets
+        header_h = 25
+        item_h = 22
         labels = getattr(self, '_header_labels', [])
         col_offsets = self._header.columnOffsets(self._rect.width, len(labels))
         col = -1
@@ -366,12 +380,54 @@ class QTreeWidget(QAbstractItemView):
             self.update()
             return
 
-        # 6. Standard Selection
+        # 6. Delegate Editor
+        delegate = self._delegates.get(col) if hasattr(self, '_delegates') else None
+        if delegate:
+            # Check if editor already exists
+            if hasattr(self, '_active_editor'):
+                self._commit_and_close_editor()
+            
+            option = QStyleOptionViewItem()
+            # Calculate rect in widget coords
+            option.rect = pygame.Rect(col_offsets[col][0], (itemAt_idx * item_h) + header_h, col_offsets[col][1], item_h)
+            
+            from .abstract_item_view import QModelIndex
+            index = QModelIndex(item, col)
+            editor = delegate.createEditor(self, option, index)
+            if editor:
+                editor.setParent(self)
+                editor.setGeometry(option.rect)
+                delegate.setEditorData(editor, index)
+                editor.show()
+                self._active_editor = (editor, delegate, item, col)
+                # If it's a slider, connect valueChanged to model update immediately for real-time feedback
+                if hasattr(editor, 'valueChanged'):
+                    editor.valueChanged.connect(lambda v: self._commit_editor_data())
+                return
+
+        # 7. Standard Selection
         if not (pygame.key.get_mods() & pygame.KMOD_CTRL):
             self.clearSelection()
         item.setSelected(not item.isSelected())
         self.itemSelectionChanged.emit()
         self.update()
+
+    def _commit_editor_data(self):
+        if hasattr(self, '_active_editor'):
+            editor, delegate, item, col = self._active_editor
+            from .abstract_item_view import QModelIndex
+            index = QModelIndex(item, col)
+            delegate.setModelData(editor, self, index)
+            self.itemChanged.emit(item, col)
+            self.update()
+
+    def _commit_and_close_editor(self):
+        if hasattr(self, '_active_editor'):
+            editor, delegate, item, col = self._active_editor
+            self._commit_editor_data()
+            editor.hide()
+            editor.setParent(None)
+            del self._active_editor
 
     def mouseMoveEvent(self, ev):
         mx, my = ev.pos().x(), ev.pos().y()

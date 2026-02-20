@@ -44,10 +44,24 @@ class QWidget(QObject):
         self._rect.width, self._rect.height = w, h
         self._resized = True
         if hasattr(self, '_layout') and self._layout: self._layout.arrange(pygame.Rect(0, 0, w, h))
-    def setGeometry(self, x, y, w, h):
+    def setGeometry(self, *args):
+        if len(args) == 1:
+            r = args[0]
+            if hasattr(r, 'x') and (hasattr(r, 'width') or hasattr(r, 'w')):
+                x = r.x() if callable(r.x) else r.x
+                y = r.y() if callable(r.y) else r.y
+                w = r.width() if hasattr(r, 'width') and callable(r.width) else (r.width if hasattr(r, 'width') else r.w)
+                h = r.height() if hasattr(r, 'height') and callable(r.height) else (r.height if hasattr(r, 'height') else r.h)
+            else:
+                x, y, w, h = r
+        else:
+            x, y, w, h = args
         self._rect = pygame.Rect(x, y, w, h)
         self._resized = True
-        if hasattr(self, '_layout') and self._layout: self._layout.arrange(pygame.Rect(0, 0, w, h))
+        if hasattr(self, '_layout') and self._layout: self._layout.arrange(pygame.Rect(0, 0, self._rect.width, self._rect.height))
+    def rect(self): 
+        from ..core import QRect
+        return QRect(0, 0, self._rect.width, self._rect.height)
     def move(self, x, y): self._rect.x, self._rect.y = x, y
     def setMinimumSize(self, w, h): self._min_size = (w, h)
     def minimumSize(self): return getattr(self, '_min_size', (0, 0))
@@ -273,6 +287,7 @@ class QWidget(QObject):
     def isVisible(self): return self._visible
     def close(self): self.hide()
     def setLayout(self, layout): self._layout = layout; layout._parent = self
+    def setParent(self, parent): self._set_parent(parent)
     def _set_parent(self, parent):
         if self._parent and self in self._parent._children: self._parent._children.remove(self)
         if not parent and QApplication._instance and self not in QApplication._instance._windows: 
@@ -351,6 +366,21 @@ class QWidget(QObject):
                 w_event.ignore() # Default to ignored for bubbling
                 if hasattr(self, 'wheelEvent'): self.wheelEvent(w_event)
                 return w_event.isAccepted()
+        
+        if event.type in (pygame.KEYDOWN, pygame.KEYUP):
+            # Try to dispatch key events if we have a handler. 
+            # In a real GUI, this goes to the focused widget. Here we just pass it to self if focused.
+            # But QGraphicsView handles it. We can just dispatch it if we have focus or if we are a view.
+            if getattr(self, '_focused', False) or self.__class__.__name__ == 'QGraphicsView' or self.__class__.__name__ == 'EditorCanvas':
+                from ..core import QKeyEvent
+                mods = getattr(event, 'mod', pygame.key.get_mods())
+                k_event = QKeyEvent(event.key, mods, getattr(event, 'unicode', ''))
+                k_event.ignore()
+                if event.type == pygame.KEYDOWN and hasattr(self, 'keyPressEvent'):
+                    self.keyPressEvent(k_event)
+                elif event.type == pygame.KEYUP and hasattr(self, 'keyReleaseEvent'):
+                    self.keyReleaseEvent(k_event)
+                if k_event.isAccepted(): return True
         
         # Legacy scroll
         if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):

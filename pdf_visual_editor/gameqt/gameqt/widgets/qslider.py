@@ -10,6 +10,9 @@ class QSlider(QWidget):
     def setMaximum(self, v): self._max = v
     def setValue(self, v): self._val = v; self.valueChanged.emit(v)
     def value(self): return self._val
+    def setOrientation(self, o): self._orientation = o
+    def setSingleStep(self, s): self._single_step = s
+    def setPageStep(self, s): self._page_step = s
     def _draw(self, pos):
         from ..application import QApplication
         if not QApplication._instance or not QApplication._instance._windows: return

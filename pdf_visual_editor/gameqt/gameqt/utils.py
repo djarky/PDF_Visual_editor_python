@@ -114,6 +114,10 @@ class QDrag:
         self._mime_data = None
     def setMimeData(self, data):
         self._mime_data = data
+    def setPixmap(self, pixmap):
+        self._pixmap = pixmap
+    def setHotSpot(self, hotspot):
+        self._hotspot = hotspot
     def exec(self, *args): 
         from .application import QApplication
         app = QApplication.instance()

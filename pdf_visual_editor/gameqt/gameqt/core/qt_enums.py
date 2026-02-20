@@ -18,6 +18,7 @@ class Qt:
         AlignVCenter = 0x0080
         AlignCenter = AlignHCenter | AlignVCenter
     class MouseButton: LeftButton = 0x01; RightButton = 0x02; MidButton = 0x04; NoButton = 0x00
+    class DropAction: CopyAction = 1; MoveAction = 2; LinkAction = 4; ActionMask = 255; TargetMoveAction = 32770; IgnoreAction = 0
     DROPFILE = pygame.DROPFILE
     DROPBEGIN = pygame.DROPBEGIN
     DROPCOMPLETE = pygame.DROPCOMPLETE
@@ -32,6 +33,7 @@ class Qt:
         DisplayRole = 0
         DecorationRole = 1
         EditRole = 2
+        UserRole = 100
         ToolTipRole = 3
         StatusTipRole = 4
         WhatsThisRole = 5
