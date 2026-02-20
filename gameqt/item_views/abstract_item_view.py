@@ -12,6 +12,16 @@ class QAbstractItemModel(QObject):
     def columnCount(self, parent=None): return 0
     def data(self, index, role=Qt.ItemDataRole.DisplayRole): return None
 
+class QModelIndex:
+    def __init__(self, item, col): self._item, self._col = item, col
+    def data(self, role=Qt.ItemDataRole.DisplayRole): 
+        if role == Qt.ItemDataRole.DisplayRole:
+            return self._item.text(self._col)
+        return self._item.data(self._col, role)
+    def row(self): return 0 # stub
+    def column(self): return self._col
+    def internalPointer(self): return self._item
+
 class QAbstractItemView(QWidget):
     class SelectionMode: SingleSelection = 1; MultiSelection = 2; ExtendedSelection = 3; ContourSelection = 4
     class DragDropMode: NoDragDrop = 0; InternalMove = 4

@@ -183,6 +183,23 @@ class QApplication:
                             target.dropEvent(drop_event)
                             if drop_event.isAccepted():
                                  result = 1 # Copy/Move action
+                        else:
+                            mime = drag._mime_data
+                            if mime:
+                                from .widgets import QMessageBox
+                                if mime.hasText() or mime.hasImage():
+                                    msg = "Elemento arrastrado fuera del lienzo.\n¿Deseas copiarlo al portapapeles del sistema?"
+                                    ans = QMessageBox.question(
+                                        None, 
+                                        "Exportar Elemento", 
+                                        msg,
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                                    )
+                                    if ans == QMessageBox.StandardButton.Yes:
+                                        if mime.hasImage():
+                                            QApplication.clipboard().setImage(mime.imageData())
+                                        elif mime.hasText():
+                                            QApplication.clipboard().setText(mime.text())
                 
                 # Forward other events? (Paint)
             
@@ -210,7 +227,9 @@ class QApplication:
         
         for child in reversed(widget._children):
             if child.isVisible():
-                 # child rect is relative to widget
+                 # child rect is relative to widget. QGraphicsScene doesn't have _rect.
+                 if not hasattr(child, '_rect'): continue
+                 
                  child_abs_pos = pygame.Vector2(widget_offset) + pygame.Vector2(child._rect.topleft)
                  child_rect_abs = pygame.Rect(child_abs_pos.x, child_abs_pos.y, child._rect.width, child._rect.height)
                  if child_rect_abs.collidepoint(global_pos):

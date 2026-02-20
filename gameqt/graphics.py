@@ -55,6 +55,13 @@ class QGraphicsScene(QObject):
         else:
             self.clearSelection()
 
+    def keyPressEvent(self, event):
+        if self._focus_item:
+            self._focus_item.keyPressEvent(event)
+    def keyReleaseEvent(self, event):
+        if self._focus_item and hasattr(self._focus_item, 'keyReleaseEvent'):
+            self._focus_item.keyReleaseEvent(event)
+
 class QGraphicsItem:
     class GraphicsItemFlag: ItemIsMovable = 1; ItemIsSelectable = 2; ItemIsFocusable = 4
     def __init__(self, parent=None):
@@ -142,6 +149,7 @@ class QGraphicsRectItem(QGraphicsItem):
     def boundingRect(self): return self._rect
     def paint(self, painter, option, widget):
         painter.save()
+        painter.setOpacity(self._opacity)
         painter.translate(self._pos.x(), self._pos.y())
         # Apply item transform if needed 
         
@@ -166,6 +174,7 @@ class QGraphicsEllipseItem(QGraphicsItem):
     def boundingRect(self): return self._rect
     def paint(self, painter, option, widget):
         painter.save()
+        painter.setOpacity(self._opacity)
         painter.translate(self._pos.x(), self._pos.y())
         painter.setPen(self._pen)
         painter.setBrush(self._brush)
@@ -183,6 +192,7 @@ class QGraphicsPixmapItem(QGraphicsItem):
     def paint(self, painter, option, widget):
         if self._pixmap:
             painter.save()
+            painter.setOpacity(self._opacity)
             painter.translate(self._pos.x(), self._pos.y())
             painter.drawPixmap(0, 0, self._pixmap)
             painter.restore()
@@ -207,6 +217,7 @@ class QGraphicsTextItem(QGraphicsItem):
     def boundingRect(self): return QRectF(0,0,100,20)
     def paint(self, painter, option, widget):
         painter.save()
+        painter.setOpacity(self._opacity)
         painter.translate(self._pos.x(), self._pos.y())
         painter.setFont(self._font)
         painter.setPen(QPen(self._color))
@@ -263,6 +274,12 @@ class QGraphicsView(QWidget):
         sx = self._view_transform._m[0]
         sy = self._view_transform._m[4]
         return QPointF(p.x() * sx + tx, p.y() * sy + ty)
+    def keyPressEvent(self, event):
+        if self._scene:
+            self._scene.keyPressEvent(event)
+    def keyReleaseEvent(self, event):
+        if self._scene and hasattr(self._scene, 'keyReleaseEvent'):
+            self._scene.keyReleaseEvent(event)
     def _draw(self, pos):
         screen = self._get_screen()
         if self._scene and screen:

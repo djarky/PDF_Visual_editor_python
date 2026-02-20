@@ -61,8 +61,25 @@ class QClipboard:
                     continue
         return self._fallback_text
     
+    def setImage(self, image):
+        if not self._ensure_scrap(): return
+        if hasattr(image, 'surface') and image.surface:
+            import io
+            import pygame
+            temp = io.BytesIO()
+            try:
+                # Save surface to BytesIO as PNG
+                pygame.image.save(image.surface, temp, "PNG")
+                png_data = temp.getvalue()
+                # Put in scrap under standard Linux/Windows image mimes
+                pygame.scrap.put("image/png", png_data)
+                pygame.scrap.put("application/x-qt-image", png_data)
+            except Exception as e:
+                print(f"[QClipboard] Failed to set image: {e}")
+
     def setMimeData(self, mime):
         if mime.hasText(): self.setText(mime.text())
+        if mime.hasImage(): self.setImage(mime.imageData())
     
     def mimeData(self):
         m = QMimeData()

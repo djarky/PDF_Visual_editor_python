@@ -13,10 +13,17 @@ class QKeySequence:
             if p == 'CTRL': self._modifiers |= pygame.KMOD_CTRL
             elif p == 'ALT': self._modifiers |= pygame.KMOD_ALT
             elif p == 'SHIFT': self._modifiers |= pygame.KMOD_SHIFT
+            elif p == 'META': self._modifiers |= pygame.KMOD_META
             else:
                 # Try to find the key in pygame constants
                 try: 
                     k_attr = f"K_{p.lower()}" if len(p) == 1 else f"K_{p}"
+                    
+                    if k_attr == "K_DELETE": k_attr = "K_DELETE"
+                    elif k_attr == "K_DEL": k_attr = "K_DELETE"
+                    elif k_attr == "K_RETURN": k_attr = "K_RETURN"
+                    elif k_attr == "K_ENTER": k_attr = "K_RETURN"
+                    
                     self._keys.append(getattr(pygame, k_attr))
                 except AttributeError:
                     print(f"[gui.QKeySequence] Unknown key sequence part: {p}")
@@ -24,7 +31,16 @@ class QKeySequence:
     def matches(self, key, mods):
         # Simplistic check
         if not self._keys: return False
-        return key == self._keys[0] and (mods & self._modifiers) == self._modifiers
+        
+        # Check if the right modifiers are pressed (ignore non-essential ones like numlock if possible, but PyGame KMODs can be strict)
+        # We need to check if the required modifiers are present, and NO unwanted modifiers are present.
+        required_mods = self._modifiers
+        
+        # We generally only care about CTRL, ALT, SHIFT, META
+        relevant_mask = pygame.KMOD_CTRL | pygame.KMOD_ALT | pygame.KMOD_SHIFT | pygame.KMOD_META
+        actual_mods = mods & relevant_mask
+        
+        return key == self._keys[0] and required_mods == actual_mods
 
     @staticmethod
     def matches_static(k1, k2): 
